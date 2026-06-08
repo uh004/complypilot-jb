@@ -12,6 +12,7 @@ htmlcov/
 .env
 .env.*
 !.env.example
+*.pdf
 outputs/
 outputs/**
 !outputs/.gitkeep
@@ -19,6 +20,7 @@ outputs/**
 !outputs/reports/.gitkeep
 !outputs/logs/
 !outputs/logs/.gitkeep
+data/chromadb/
 vector_db/
 vector_db/**
 !vector_db/.gitkeep
