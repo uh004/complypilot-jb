@@ -1,4 +1,89 @@
 {
-  "templates": []
+  "schema_version": "1.0",
+  "templates": {
+    "approval_misleading": {
+      "risk_type_ko": "승인 보장 오인",
+      "base_template": "{original} 표현은 대출 승인 여부가 보장되는 것처럼 오인될 수 있습니다.",
+      "replacement_text": "대출 가능 여부는 개인 신용도 및 심사 결과에 따라 달라질 수 있습니다.",
+      "required_disclaimer": "대출 가능 여부는 당행 심사 기준, 개인 신용도 및 제출 서류에 따라 달라질 수 있습니다.",
+      "tone": "cautious",
+      "forbidden_rewrite_terms": [
+        "누구나 승인",
+        "무조건 승인",
+        "100% 승인",
+        "승인 보장",
+        "빠르게 승인"
+      ]
+    },
+    "rate_condition_missing": {
+      "risk_type_ko": "금리 조건 누락",
+      "base_template": "{original} 표현은 적용 조건이 함께 안내되지 않을 경우 소비자 오인 가능성이 있습니다.",
+      "replacement_text": "금리는 개인 신용도, 거래 조건 및 심사 결과에 따라 달라질 수 있습니다.",
+      "required_disclaimer": "최저금리는 일정 조건 충족 시 적용될 수 있으며, 실제 적용 금리는 개인별 조건에 따라 달라질 수 있습니다.",
+      "tone": "informative",
+      "forbidden_rewrite_terms": [
+        "최저금리 보장",
+        "무조건 최저금리",
+        "누구나 최저금리"
+      ]
+    },
+    "fee_condition_missing": {
+      "risk_type_ko": "수수료 조건 누락",
+      "base_template": "{original} 표현은 혜택 조건과 적용 범위가 함께 안내되지 않으면 오인 가능성이 있습니다.",
+      "replacement_text": "수수료 혜택은 적용 대상, 기간 및 조건 충족 여부에 따라 달라질 수 있습니다.",
+      "required_disclaimer": "수수료 면제 또는 할인 혜택은 상품 조건, 적용 기간 및 대상 고객에 따라 달라질 수 있습니다.",
+      "tone": "informative",
+      "forbidden_rewrite_terms": [
+        "수수료 무조건 무료",
+        "전원 무료",
+        "조건 없이 무료"
+      ]
+    },
+    "return_guarantee": {
+      "risk_type_ko": "수익 보장 표현",
+      "base_template": "{original} 표현은 투자 수익이 보장되는 것처럼 오인될 수 있습니다.",
+      "replacement_text": "투자 결과는 시장 상황과 운용 성과에 따라 달라질 수 있습니다.",
+      "required_disclaimer": "투자상품은 운용 결과에 따라 원금 손실이 발생할 수 있으며, 과거 수익률이 미래 수익률을 보장하지 않습니다.",
+      "tone": "cautious",
+      "forbidden_rewrite_terms": [
+        "수익 보장",
+        "확정 수익",
+        "무조건 수익",
+        "고수익 보장"
+      ]
+    },
+    "principal_loss_misleading": {
+      "risk_type_ko": "원금 손실 오인",
+      "base_template": "{original} 표현은 원금 손실 가능성이 없는 것처럼 오인될 수 있습니다.",
+      "replacement_text": "투자상품은 운용 결과에 따라 원금 손실이 발생할 수 있습니다.",
+      "required_disclaimer": "투자상품은 예금자보호 대상이 아닐 수 있으며, 운용 결과에 따라 원금 손실이 발생할 수 있습니다.",
+      "tone": "cautious",
+      "forbidden_rewrite_terms": [
+        "원금 보장",
+        "원금 손실 없음",
+        "손실 없는 투자",
+        "무위험 투자"
+      ]
+    },
+    "benefit_condition_missing": {
+      "risk_type_ko": "혜택 조건 누락",
+      "base_template": "{original} 표현은 혜택 적용 조건이 함께 안내되지 않을 경우 소비자 오인 가능성이 있습니다.",
+      "replacement_text": "혜택은 이용 조건, 적용 대상 및 기간에 따라 달라질 수 있습니다.",
+      "required_disclaimer": "혜택은 전월 실적, 이용 조건, 적용 대상, 한도 및 제외 기준에 따라 달라질 수 있습니다.",
+      "tone": "informative",
+      "forbidden_rewrite_terms": [
+        "무조건 할인",
+        "전원 혜택",
+        "조건 없이 제공"
+      ]
+    },
+    "default": {
+      "risk_type_ko": "일반 위험 표현",
+      "base_template": "{original} 표현은 조건이나 적용 범위가 불명확할 수 있습니다.",
+      "replacement_text": "해당 혜택 또는 조건은 상품별 기준과 고객별 조건에 따라 달라질 수 있습니다.",
+      "required_disclaimer": "자세한 조건과 유의사항은 상품 설명서 및 약관을 확인해 주세요.",
+      "tone": "neutral",
+      "forbidden_rewrite_terms": []
+    }
+  }
 }
-

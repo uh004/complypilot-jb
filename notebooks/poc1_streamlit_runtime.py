@@ -2834,6 +2834,7 @@ def report_builder_node(state: ComplianceState) -> ComplianceState:
     updated_state["report"] = report
     updated_state["report_tables"] = build_report_tables(report)
     updated_state["next_action"] = "done"
+    updated_state["next_action"] = "save_result"
 
     return updated_state
 
@@ -3090,6 +3091,8 @@ def save_result_node(state: ComplianceState) -> ComplianceState:
         updated_state["report"] = final_report
         updated_state["saved_result"] = saved_result
         updated_state["next_action"] = "done"
+        updated_state["next_action"] = "end"
+        updated_state["workflow_status"] = "completed"
 
     except Exception as exc:
         updated_state["saved_result"] = {

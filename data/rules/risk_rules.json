@@ -1,4 +1,180 @@
 {
-  "rules": []
+  "schema_version": "1.0",
+  "rules": [
+    {
+      "rule_id": "LOAN_APPROVAL_001",
+      "product_types": ["loan"],
+      "channels": ["document", "sns_cardnews", "app_banner", "homepage"],
+      "risk_type": "approval_misleading",
+      "risk_type_ko": "승인 보장 오인",
+      "base_level": "High",
+      "patterns": [
+        "누구나 승인",
+        "무조건 승인",
+        "100% 승인",
+        "전원 승인",
+        "빠르게 승인",
+        "즉시 승인",
+        "승인 보장",
+        "거절 없이 가능"
+      ],
+      "normalized_patterns": [
+        "누구나승인",
+        "무조건승인",
+        "100%승인",
+        "전원승인",
+        "빠르게승인",
+        "즉시승인",
+        "승인보장"
+      ],
+      "reason": "대출 승인 여부가 보장되는 것처럼 보일 수 있어 소비자 오인 가능성이 있습니다.",
+      "required_disclaimer_ids": [
+        "LOAN_DISC_APPROVAL_001"
+      ],
+      "evidence_query": "금융 광고 대출 승인 보장 표현 심사 결과 소비자 오인",
+      "rewrite_hint": "대출 가능 여부는 개인 신용도 및 심사 결과에 따라 달라질 수 있음을 안내해야 합니다.",
+      "enabled": true
+    },
+    {
+      "rule_id": "LOAN_RATE_001",
+      "product_types": ["loan"],
+      "channels": ["document", "sns_cardnews", "app_banner", "homepage"],
+      "risk_type": "rate_condition_missing",
+      "risk_type_ko": "금리 조건 누락",
+      "base_level": "Medium",
+      "patterns": [
+        "최저금리",
+        "최저 금리",
+        "낮은 금리",
+        "업계 최저",
+        "최저 연",
+        "초저금리"
+      ],
+      "normalized_patterns": [
+        "최저금리",
+        "낮은금리",
+        "업계최저",
+        "초저금리"
+      ],
+      "reason": "최저금리 적용 조건, 대상, 산정 기준이 함께 고지되지 않으면 소비자 오인 가능성이 있습니다.",
+      "required_disclaimer_ids": [
+        "LOAN_DISC_RATE_001"
+      ],
+      "evidence_query": "금융 광고 대출 최저금리 적용 조건 우대금리 고지",
+      "rewrite_hint": "금리는 개인 신용도, 거래 조건, 심사 결과에 따라 달라질 수 있음을 안내해야 합니다.",
+      "enabled": true
+    },
+    {
+      "rule_id": "LOAN_FEE_001",
+      "product_types": ["loan"],
+      "channels": ["document", "sns_cardnews", "app_banner", "homepage"],
+      "risk_type": "fee_condition_missing",
+      "risk_type_ko": "수수료 조건 누락",
+      "base_level": "Medium",
+      "patterns": [
+        "수수료 무료",
+        "수수료 0원",
+        "무료 혜택",
+        "수수료 면제"
+      ],
+      "normalized_patterns": [
+        "수수료무료",
+        "수수료0원",
+        "무료혜택",
+        "수수료면제"
+      ],
+      "reason": "수수료 면제 조건, 적용 대상, 적용 기간이 함께 고지되지 않으면 소비자 오인 가능성이 있습니다.",
+      "required_disclaimer_ids": [
+        "LOAN_DISC_FEE_001"
+      ],
+      "evidence_query": "금융 광고 수수료 무료 조건 고지 혜택 적용 범위",
+      "rewrite_hint": "수수료 혜택은 조건 충족 시 적용될 수 있음을 안내해야 합니다.",
+      "enabled": true
+    },
+    {
+      "rule_id": "INVEST_RETURN_001",
+      "product_types": ["investment"],
+      "channels": ["document", "sns_cardnews", "app_banner", "homepage"],
+      "risk_type": "return_guarantee",
+      "risk_type_ko": "수익 보장 표현",
+      "base_level": "High",
+      "patterns": [
+        "수익 보장",
+        "확정 수익",
+        "무조건 수익",
+        "안정 수익 보장",
+        "고수익 보장"
+      ],
+      "normalized_patterns": [
+        "수익보장",
+        "확정수익",
+        "무조건수익",
+        "고수익보장"
+      ],
+      "reason": "투자상품의 수익이 보장되는 것처럼 표현하면 소비자 오인 가능성이 큽니다.",
+      "required_disclaimer_ids": [
+        "INVEST_DISC_RISK_001"
+      ],
+      "evidence_query": "투자상품 광고 수익 보장 표현 원금 손실 가능성 고지",
+      "rewrite_hint": "투자 결과는 시장 상황에 따라 변동될 수 있으며 원금 손실 가능성이 있음을 안내해야 합니다.",
+      "enabled": true
+    },
+    {
+      "rule_id": "INVEST_PRINCIPAL_001",
+      "product_types": ["investment"],
+      "channels": ["document", "sns_cardnews", "app_banner", "homepage"],
+      "risk_type": "principal_loss_misleading",
+      "risk_type_ko": "원금 손실 오인",
+      "base_level": "High",
+      "patterns": [
+        "원금 보장",
+        "원금 손실 없음",
+        "손실 없는 투자",
+        "안전한 투자",
+        "무위험 투자"
+      ],
+      "normalized_patterns": [
+        "원금보장",
+        "원금손실없음",
+        "손실없는투자",
+        "무위험투자"
+      ],
+      "reason": "투자상품에서 원금 손실 가능성이 없다고 오인될 수 있는 표현입니다.",
+      "required_disclaimer_ids": [
+        "INVEST_DISC_RISK_001"
+      ],
+      "evidence_query": "투자상품 광고 원금 손실 가능성 원금 보장 표현 금지",
+      "rewrite_hint": "투자상품은 운용 결과에 따라 원금 손실이 발생할 수 있음을 안내해야 합니다.",
+      "enabled": true
+    },
+    {
+      "rule_id": "CARD_BENEFIT_001",
+      "product_types": ["card"],
+      "channels": ["document", "sns_cardnews", "app_banner", "homepage"],
+      "risk_type": "benefit_condition_missing",
+      "risk_type_ko": "혜택 조건 누락",
+      "base_level": "Medium",
+      "patterns": [
+        "무조건 할인",
+        "최대 할인",
+        "캐시백 제공",
+        "혜택 제공",
+        "무료 제공"
+      ],
+      "normalized_patterns": [
+        "무조건할인",
+        "최대할인",
+        "캐시백제공",
+        "혜택제공",
+        "무료제공"
+      ],
+      "reason": "카드 혜택의 적용 조건, 전월 실적, 제외 대상이 함께 고지되지 않으면 소비자 오인 가능성이 있습니다.",
+      "required_disclaimer_ids": [
+        "CARD_DISC_BENEFIT_001"
+      ],
+      "evidence_query": "카드 광고 혜택 조건 전월 실적 제외 대상 고지",
+      "rewrite_hint": "카드 혜택은 전월 실적, 이용 조건, 제외 대상에 따라 달라질 수 있음을 안내해야 합니다.",
+      "enabled": true
+    }
+  ]
 }
-
