@@ -42,14 +42,33 @@ def detect_risks_in_sentence(sentence: str, risk_rules: list[dict[str, Any]]) ->
 
 
 def deduplicate_risks(detected_risks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    seen = set()
-    unique_risks = []
+    grouped: dict[tuple[str, str], dict[str, Any]] = {}
+
     for risk in detected_risks:
-        key = (risk.get("rule_id"), risk.get("keyword"), risk.get("matched_sentence"))
-        if key in seen:
+        key = (risk.get("rule_id", ""), risk.get("risk_type", ""))
+        sentence = risk.get("matched_sentence", "")
+        keyword = risk.get("keyword", "")
+
+        if key not in grouped:
+            grouped[key] = {
+                **risk,
+                "keywords": [keyword] if keyword else [],
+                "matched_sentences": [sentence] if sentence else [],
+                "match_count": 1,
+            }
             continue
-        seen.add(key)
-        unique_risks.append(risk)
+
+        grouped[key]["match_count"] = int(grouped[key].get("match_count", 1)) + 1
+        if keyword and keyword not in grouped[key]["keywords"]:
+            grouped[key]["keywords"].append(keyword)
+        if sentence and sentence not in grouped[key]["matched_sentences"]:
+            grouped[key]["matched_sentences"].append(sentence)
+
+    unique_risks = list(grouped.values())
+    for risk in unique_risks:
+        if risk.get("keywords"):
+            risk["keyword"] = ", ".join(risk["keywords"][:3])
+    unique_risks.sort(key=lambda item: {"High": 3, "Medium": 2, "Low": 1}.get(item.get("base_level", "Low"), 0), reverse=True)
     return unique_risks
 
 

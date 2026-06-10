@@ -157,6 +157,29 @@ def keyword_score(query: str, document_text: str) -> float:
     return sum(1.0 for token in query_tokens if token in document_normalized) / len(query_tokens)
 
 
+def build_context_snippet(document_text: str, query: str, width: int = 420) -> str:
+    text = normalize_extracted_text(document_text)
+    if not text:
+        return ""
+
+    lower_text = text.lower()
+    tokens = tokenize_for_search(query)
+    positions = [lower_text.find(token.lower()) for token in tokens if lower_text.find(token.lower()) >= 0]
+
+    if positions:
+        center = min(positions)
+        start = max(0, center - width // 2)
+        end = min(len(text), start + width)
+        snippet = text[start:end].strip()
+        if start > 0:
+            snippet = "... " + snippet
+        if end < len(text):
+            snippet = snippet + " ..."
+        return snippet
+
+    return text[:width].strip()
+
+
 def search_fallback_evidence(query: str, top_k: int = 3) -> list[dict[str, Any]]:
     scored_results = []
     for document in load_fallback_documents():
@@ -170,7 +193,7 @@ def search_fallback_evidence(query: str, top_k: int = 3) -> list[dict[str, Any]]
             "source": document["source"],
             "doc_title": document["doc_title"],
             "page": document["page"],
-            "snippet": document["text"][:800],
+            "snippet": build_context_snippet(document["text"], query),
         })
     scored_results.sort(key=lambda item: item["score"], reverse=True)
     return scored_results[:top_k]
@@ -197,15 +220,18 @@ def retrieve_evidence_for_query(query_item: dict[str, Any], top_k: int = 3) -> l
 
 
 def deduplicate_evidence(evidence_list: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    seen = set()
-    unique = []
+    best_by_key: dict[tuple[str, str, str, object], dict[str, Any]] = {}
     for evidence in evidence_list:
-        key = (evidence.get("source_path"), evidence.get("page"), evidence.get("snippet", "")[:80], evidence.get("risk_type"))
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(evidence)
-    return unique
+        key = (
+            evidence.get("risk_type", ""),
+            evidence.get("keyword", ""),
+            evidence.get("doc_title", evidence.get("source", "")),
+            evidence.get("page"),
+        )
+        if key not in best_by_key or evidence.get("score", 0.0) > best_by_key[key].get("score", 0.0):
+            best_by_key[key] = evidence
+
+    return list(best_by_key.values())
 
 
 def calculate_evidence_score(evidence_list: list[dict[str, Any]]) -> float:

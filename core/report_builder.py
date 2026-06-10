@@ -14,17 +14,51 @@ from core.state import ComplianceState
 
 def make_report_summary(state: ComplianceState) -> str:
     risk_level = state.get("risk_level", "Pass")
+    risk_count = len(state.get("detected_risks", []))
+    missing_count = len(state.get("missing_disclaimers", []))
+
     if risk_level == "High":
-        return "소비자 오인 가능성이 높은 표현이 탐지되어 준법관리자 검토가 필요합니다."
+        return f"소비자 오인 가능성이 높은 표현 {risk_count}건이 탐지되어 준법관리자 검토가 필요합니다."
     if state.get("compliance_review_required", False):
         return "준법관리자 검토가 필요한 항목이 있습니다."
     if state.get("action_required", False):
-        return "조건 누락 가능성 또는 수정 확인이 필요한 항목이 있습니다."
+        return f"위험 표현 {risk_count}건, 필수 고지 누락 가능성 {missing_count}건을 확인해야 합니다."
     if risk_level == "Medium":
         return "일부 조건 누락 가능성이 있어 수정안 확인을 권장합니다."
     if risk_level == "Low":
         return "경미한 확인 필요 사항이 있으나 전반적인 위험도는 낮게 평가되었습니다."
     return "위험 표현 및 필수 고지 누락 가능성이 뚜렷하게 탐지되지 않았습니다."
+
+
+def build_review_points(state: ComplianceState) -> list[dict[str, Any]]:
+    points = []
+
+    for risk in state.get("detected_risks", []):
+        sentences = risk.get("matched_sentences") or [risk.get("matched_sentence", "")]
+        keyword_label = risk.get("keyword", "")
+        points.append({
+            "type": "위험 표현",
+            "level": risk.get("base_level", "Medium"),
+            "title": f"'{keyword_label}' 표현 확인 필요",
+            "why": risk.get("reason", "소비자 오인 가능성이 있는 표현입니다."),
+            "where": sentences[0] if sentences else "",
+            "match_count": risk.get("match_count", 1),
+            "suggestion": risk.get("rewrite_hint", ""),
+        })
+
+    for item in state.get("missing_disclaimers", []):
+        points.append({
+            "type": "필수 고지 누락 가능성",
+            "level": item.get("base_level", "Medium"),
+            "title": f"'{item.get('disclaimer', '')}' 고지 확인 필요",
+            "why": item.get("reason", "필수 고지 또는 조건 누락 가능성이 있습니다."),
+            "where": "추출 문구에서 관련 키워드가 충분히 확인되지 않았습니다.",
+            "match_count": 0,
+            "suggestion": item.get("recommended_text", ""),
+            "checked_keywords": item.get("checked_keywords", []),
+        })
+
+    return points
 
 
 def build_detected_risk_rows(detected_risks: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -33,10 +67,13 @@ def build_detected_risk_rows(detected_risks: list[dict[str, Any]]) -> list[dict[
         rows.append({
             "no": index,
             "keyword": risk.get("keyword", ""),
+            "keywords": risk.get("keywords", []),
             "risk_type": risk.get("risk_type", ""),
             "base_level": risk.get("base_level", ""),
             "reason": risk.get("reason", ""),
             "matched_sentence": risk.get("matched_sentence", ""),
+            "matched_sentences": risk.get("matched_sentences", []),
+            "match_count": risk.get("match_count", 1),
             "rule_id": risk.get("rule_id", ""),
         })
     return rows
@@ -87,6 +124,7 @@ def report_builder_node(state: ComplianceState) -> ComplianceState:
     detected_risks = build_detected_risk_rows(updated_state.get("detected_risks", []))
     missing_disclaimers = build_missing_disclaimer_rows(updated_state.get("missing_disclaimers", []))
     evidence_rows = build_evidence_rows(updated_state.get("evidence_list", []))
+    review_points = build_review_points(updated_state)
 
     report = {
         "meta": {
@@ -119,6 +157,7 @@ def report_builder_node(state: ComplianceState) -> ComplianceState:
             "review_required": updated_state.get("review_required", False),
             "summary": make_report_summary(updated_state),
         },
+        "review_points": review_points,
         "detected_risks": detected_risks,
         "missing_disclaimers": missing_disclaimers,
         "evidence": evidence_rows,

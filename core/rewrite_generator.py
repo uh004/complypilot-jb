@@ -57,20 +57,39 @@ def build_required_disclaimer(missing_disclaimers: list[dict[str, Any]]) -> str:
 
 def rewrite_generator_node(state: ComplianceState) -> ComplianceState:
     updated_state = dict(state)
-    rewrite_text = updated_state.get("extracted_text", "")
     templates = load_rewrite_templates()
     applied = []
 
     for risk in updated_state.get("detected_risks", []):
-        keyword = str(risk.get("keyword", ""))
+        keywords = risk.get("keywords") or [risk.get("keyword", "")]
+        keyword = ", ".join(str(item) for item in keywords if item)
         replacement = replacement_for_risk(risk, templates)
-        if keyword and keyword in rewrite_text:
-            rewrite_text = rewrite_text.replace(keyword, replacement)
-            applied.append({"keyword": keyword, "replacement": replacement, "risk_type": risk.get("risk_type", "")})
+        if keyword:
+            applied.append({
+                "keyword": keyword,
+                "risk_type": risk.get("risk_type", ""),
+                "base_level": risk.get("base_level", ""),
+                "original_sentence": risk.get("matched_sentence", ""),
+                "replacement": replacement,
+            })
 
     required_disclaimer = build_required_disclaimer(updated_state.get("missing_disclaimers", []))
+    sections = []
+
+    if applied:
+        sections.append("[위험 표현 수정 권장]")
+        for item in applied:
+            sections.append(f"- '{item['keyword']}' 표현: {item['replacement']}")
+
     if required_disclaimer:
-        rewrite_text = f"{rewrite_text}\n\n[추가 안내 필요]\n{required_disclaimer}".strip()
+        sections.append("\n[추가 고지 권장]")
+        sections.extend(f"- {line}" for line in required_disclaimer.splitlines() if line.strip())
+
+    if not sections:
+        sections.append("[수정안]")
+        sections.append("위험 표현 또는 필수 고지 누락 가능성이 뚜렷하게 탐지되지 않았습니다.")
+
+    rewrite_text = "\n".join(sections).strip()
 
     updated_state["rewrite_text"] = rewrite_text
     updated_state["required_disclaimer"] = required_disclaimer or updated_state.get("required_disclaimer", "")
