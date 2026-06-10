@@ -1,0 +1,74 @@
+from core.report.view_model import build_user_view_model, deduplicate_evidence, deduplicate_risks
+
+
+def test_pass_case_view_model_hides_problem_cards() -> None:
+    result = {
+        "risk_level": "Pass",
+        "detected_risks": [],
+        "missing_disclaimers": [],
+        "guardrail_status": "ok",
+        "action_required": False,
+        "compliance_review_required": False,
+    }
+
+    view_model = build_user_view_model(result)
+
+    assert view_model["is_pass"] is True
+    assert view_model["final_decision"] == "통과"
+    assert view_model["problem_cards"] == []
+    assert view_model["clean_rewrite_text"] == "수정이 필요한 문구가 발견되지 않았습니다."
+    assert view_model["guardrail_label"] == "이상 없음"
+
+
+def test_high_case_view_model_builds_problem_cards() -> None:
+    result = {
+        "risk_level": "High",
+        "guardrail_status": "ok",
+        "action_required": True,
+        "compliance_review_required": True,
+        "detected_risks": [
+            {
+                "keyword": "누구나 승인",
+                "risk_type": "approval_misleading",
+                "base_level": "High",
+                "reason": "승인 가능성을 단정적으로 표현했습니다.",
+                "matched_sentence": "누구나 승인 가능한 대출입니다.",
+            }
+        ],
+        "missing_disclaimers": [],
+    }
+
+    view_model = build_user_view_model(result)
+
+    assert view_model["is_pass"] is False
+    assert view_model["final_decision"] == "높음"
+    assert view_model["compliance_review_label"] == "필요"
+    assert view_model["problem_cards"]
+    assert view_model["problem_cards"][0]["problem_expression"] == "누구나 승인"
+    assert "개인 신용도" in view_model["problem_cards"][0]["suggested_sentence"]
+
+
+def test_deduplicate_risks_groups_same_risk_expression() -> None:
+    risks = [
+        {"keyword": "누구나 승인", "risk_type": "approval_misleading", "matched_sentence": "A"},
+        {"keyword": "누구나 승인", "risk_type": "approval_misleading", "matched_sentence": "B"},
+    ]
+
+    deduped = deduplicate_risks(risks)
+
+    assert len(deduped) == 1
+    assert deduped[0]["match_count"] == 2
+
+
+def test_deduplicate_evidence_keeps_best_score() -> None:
+    evidence = [
+        {"doc_title": "guide.pdf", "page": 1, "risk_type": "approval_misleading", "score": 0.2, "snippet": "old"},
+        {"doc_title": "guide.pdf", "page": 1, "risk_type": "approval_misleading", "score": 0.8, "snippet": "new"},
+    ]
+
+    deduped = deduplicate_evidence(evidence)
+
+    assert len(deduped) == 1
+    assert deduped[0]["score"] == 0.8
+    assert deduped[0]["snippet"] == "new"
+

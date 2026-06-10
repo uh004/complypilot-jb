@@ -89,6 +89,7 @@ class ComplianceState(TypedDict):
     report: NotRequired[dict[str, Any]]
     report_tables: NotRequired[dict[str, list[dict[str, Any]]]]
     saved_result: NotRequired[dict[str, Any]]
+    pdf_report_path: NotRequired[str]
 
     # HITL
     review_status: NotRequired[str]

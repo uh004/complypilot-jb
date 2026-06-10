@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import REPORTS_DIR
+from core.report.save_report import save_report_outputs
+from core.report.view_model import build_user_view_model
 from core.state import ComplianceState
 
 
@@ -266,19 +268,13 @@ def save_result_node(state: ComplianceState) -> ComplianceState:
     }
 
     try:
-        json_path, csv_path = save_report_files(report)
-        saved_result = {
-            "status": "saved",
-            "json_path": str(json_path),
-            "csv_path": str(csv_path),
-            "saved_at": datetime.now().isoformat(timespec="seconds"),
-            "error": "",
-        }
+        saved_result = save_report_outputs(report, updated_state)
     except Exception as exc:
         saved_result = {
             "status": "save_failed",
             "json_path": "",
             "csv_path": "",
+            "pdf_path": "",
             "saved_at": datetime.now().isoformat(timespec="seconds"),
             "error": str(exc),
         }
@@ -286,8 +282,10 @@ def save_result_node(state: ComplianceState) -> ComplianceState:
         updated_state["review_required"] = True
 
     report["outputs"] = saved_result
+    report["view_model"] = build_user_view_model({**updated_state, "report": report})
     updated_state["report"] = report
     updated_state["saved_result"] = saved_result
+    updated_state["pdf_report_path"] = saved_result.get("pdf_path", "")
     updated_state["next_action"] = "done"
     updated_state["workflow_status"] = "completed"
     updated_state["final_message"] = "Workflow completed."
