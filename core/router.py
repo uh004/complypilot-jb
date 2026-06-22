@@ -4,6 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from core.guardrail_checker import (
+    GUARDRAIL_EXTRACTION_CHECK_REQUIRED,
+    GUARDRAIL_INSUFFICIENT_EVIDENCE,
+    GUARDRAIL_LEGAL_ASSERTION,
+    GUARDRAIL_OK,
+    GUARDRAIL_REWRITE_NEEDED,
+)
 from core.state import ComplianceState
 
 
@@ -30,7 +37,7 @@ def increment_retry(updated_state: ComplianceState) -> None:
 def router_node(state: ComplianceState) -> ComplianceState:
     updated_state = dict(state)
     risk_level = updated_state.get("risk_level", "Pass")
-    guardrail_status = updated_state.get("guardrail_status", "ok")
+    guardrail_status = updated_state.get("guardrail_status", GUARDRAIL_OK)
     retry_count, max_retry = get_retry_values(updated_state)
     action_required = bool(updated_state.get("action_required", False))
     compliance_review_required = bool(updated_state.get("compliance_review_required", False))
@@ -42,11 +49,11 @@ def router_node(state: ComplianceState) -> ComplianceState:
         next_action = ROUTE_HITL
         compliance_review_required = True
         route_reason = "최대 재시도 횟수에 도달하여 준법관리자 검토로 전환합니다."
-    elif guardrail_status == "extraction_check_required":
+    elif guardrail_status == GUARDRAIL_EXTRACTION_CHECK_REQUIRED:
         next_action = ROUTE_HITL
         compliance_review_required = True
         route_reason = "텍스트 추출 신뢰도 확인이 필요하여 준법관리자 검토로 전환합니다."
-    elif guardrail_status == "insufficient_evidence":
+    elif guardrail_status == GUARDRAIL_INSUFFICIENT_EVIDENCE:
         if can_retry(updated_state):
             next_action = ROUTE_EVIDENCE_RETRY
             action_required = True
@@ -56,7 +63,7 @@ def router_node(state: ComplianceState) -> ComplianceState:
             next_action = ROUTE_HITL
             compliance_review_required = True
             route_reason = "근거 부족 상태에서 재시도 한도에 도달하여 준법관리자 검토로 전환합니다."
-    elif guardrail_status in ["rewrite_needed", "legal_assertion"]:
+    elif guardrail_status in [GUARDRAIL_REWRITE_NEEDED, GUARDRAIL_LEGAL_ASSERTION]:
         if can_retry(updated_state):
             next_action = ROUTE_REWRITE_RETRY
             action_required = True
@@ -96,13 +103,13 @@ def determine_hitl_reasons(state: ComplianceState) -> list[str]:
     reasons = []
     if state.get("risk_level") == "High":
         reasons.append("High 리스크 항목으로 준법관리자 검토가 필요합니다.")
-    if state.get("guardrail_status") == "insufficient_evidence":
+    if state.get("guardrail_status") == GUARDRAIL_INSUFFICIENT_EVIDENCE:
         reasons.append("규정 근거가 충분하지 않아 준법관리자 검토가 필요합니다.")
-    if state.get("guardrail_status") == "extraction_check_required":
+    if state.get("guardrail_status") == GUARDRAIL_EXTRACTION_CHECK_REQUIRED:
         reasons.append("OCR 또는 텍스트 추출 결과 확인이 필요합니다.")
-    if state.get("guardrail_status") == "legal_assertion":
+    if state.get("guardrail_status") == GUARDRAIL_LEGAL_ASSERTION:
         reasons.append("법률 단정 표현이 포함되어 수정 확인이 필요합니다.")
-    if state.get("guardrail_status") == "rewrite_needed":
+    if state.get("guardrail_status") == GUARDRAIL_REWRITE_NEEDED:
         reasons.append("수정안에 위험 표현이 남아 있어 재작성 확인이 필요합니다.")
     retry_count, max_retry = get_retry_values(state)
     if retry_count >= max_retry:

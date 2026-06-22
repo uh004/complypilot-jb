@@ -17,6 +17,12 @@ LEGAL_ASSERTION_PATTERNS = [
 EXTRACTION_CONFIDENCE_THRESHOLD = 0.5
 EVIDENCE_INSUFFICIENT_SCORE = 0.25
 
+GUARDRAIL_OK = "ok"
+GUARDRAIL_EXTRACTION_CHECK_REQUIRED = "extraction_check_required"
+GUARDRAIL_INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+GUARDRAIL_LEGAL_ASSERTION = "legal_assertion"
+GUARDRAIL_REWRITE_NEEDED = "rewrite_needed"
+
 
 def contains_legal_assertion(text: str) -> list[str]:
     return [pattern for pattern in LEGAL_ASSERTION_PATTERNS if pattern in (text or "")]
@@ -55,25 +61,25 @@ def guardrail_checker_node(state: ComplianceState) -> ComplianceState:
     needs_hitl = False
     needs_rewrite = False
     needs_retrieval_retry = False
-    guardrail_status = "ok"
+    guardrail_status = GUARDRAIL_OK
     messages = []
 
     if not extraction_sufficient:
-        guardrail_status = "extraction_check_required"
+        guardrail_status = GUARDRAIL_EXTRACTION_CHECK_REQUIRED
         needs_hitl = True
         messages.append("텍스트 추출 신뢰도가 낮아 원문 확인이 필요합니다.")
     elif not evidence_sufficient:
-        guardrail_status = "insufficient_evidence"
+        guardrail_status = GUARDRAIL_INSUFFICIENT_EVIDENCE
         needs_hitl = True
         needs_retrieval_retry = True
         messages.append("검색된 규정 근거가 충분하지 않아 재검색 또는 준법관리자 검토가 필요합니다.")
     elif legal_assertions:
-        guardrail_status = "legal_assertion"
+        guardrail_status = GUARDRAIL_LEGAL_ASSERTION
         needs_hitl = True
         needs_rewrite = True
         messages.append("수정안 또는 판단 사유에 법률 단정 표현이 포함되어 재작성 확인이 필요합니다.")
     elif remaining_risk_keywords:
-        guardrail_status = "rewrite_needed"
+        guardrail_status = GUARDRAIL_REWRITE_NEEDED
         needs_rewrite = True
         needs_hitl = risk_level == "High"
         messages.append("수정안에 위험 표현이 남아 있어 재작성 확인이 필요합니다.")

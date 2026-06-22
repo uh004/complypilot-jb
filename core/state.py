@@ -20,6 +20,9 @@ class ComplianceState(TypedDict):
     extraction_confidence: NotRequired[float]
     extraction_method: NotRequired[str]
     extraction_quality: NotRequired[dict[str, Any]]
+    page_texts: NotRequired[list[dict[str, Any]]]
+    paragraphs: NotRequired[list[str]]
+    source_segments: NotRequired[list[dict[str, Any]]]
     sentences: NotRequired[list[str]]
 
     # Detection

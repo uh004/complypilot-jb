@@ -72,3 +72,36 @@ def test_deduplicate_evidence_keeps_best_score() -> None:
     assert deduped[0]["score"] == 0.8
     assert deduped[0]["snippet"] == "new"
 
+
+def test_view_model_sanitizes_evidence_paths_and_legal_wording() -> None:
+    result = {
+        "risk_level": "High",
+        "action_required": True,
+        "compliance_review_required": True,
+        "detected_risks": [
+            {
+                "keyword": "누구나 승인",
+                "risk_type": "approval_misleading",
+                "base_level": "High",
+                "reason": "This is illegal.",
+                "matched_sentence": "누구나 승인 가능한 대출입니다.",
+            }
+        ],
+        "missing_disclaimers": [],
+        "evidence_list": [
+            {
+                "doc_title": "C:/Users/USER/private/rule.txt",
+                "source_path": "C:/Users/USER/private/rule.txt",
+                "page": 1,
+                "risk_type": "approval_misleading",
+                "score": 0.8,
+                "snippet": "이 문구는 불법입니다.",
+            }
+        ],
+    }
+
+    view_model = build_user_view_model(result)
+
+    assert view_model["evidence"][0]["doc_title"] == "rule.txt"
+    assert "불법입니다" not in view_model["evidence"][0]["snippet"]
+    assert "illegal" not in view_model["problem_cards"][0]["why"].lower()

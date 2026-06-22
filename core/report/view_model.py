@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections import OrderedDict
 from typing import Any
 
+from core.report.sanitize import sanitize_report_payload
+
 
 RISK_LEVEL_LABELS = {
     "Pass": "통과",
@@ -87,14 +89,14 @@ def deduplicate_risks(risks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         sentence = _first_sentence(risk)
 
         if key not in grouped:
-            grouped[key] = {
+            grouped[key] = sanitize_report_payload({
                 **risk,
                 "problem_expression": _keyword_label(risk),
                 "problem_sentence": sentence,
                 "risk_type_label": risk_type_label(str(risk.get("risk_type", ""))),
                 "level_label": level_label(str(risk.get("base_level", ""))),
                 "match_count": int(risk.get("match_count", 1) or 1),
-            }
+            })
             continue
 
         grouped[key]["match_count"] = int(grouped[key].get("match_count", 1)) + int(risk.get("match_count", 1) or 1)
@@ -107,14 +109,14 @@ def enrich_missing_disclaimers(missing_disclaimers: list[dict[str, Any]]) -> lis
     for item in missing_disclaimers or []:
         disclaimer = str(item.get("disclaimer", "필수 고지"))
         checked = item.get("checked_keywords", [])
-        enriched.append({
+        enriched.append(sanitize_report_payload({
             **item,
             "title": f"{disclaimer} 보완 필요",
             "disclaimer": disclaimer,
             "why": item.get("reason") or f"{disclaimer} 관련 조건이 충분히 확인되지 않았습니다.",
             "checked_keywords": checked,
             "suggestion": item.get("recommended_text") or f"{disclaimer} 관련 조건을 문구에 함께 표시해 주세요.",
-        })
+        }))
     return enriched
 
 
@@ -129,7 +131,7 @@ def deduplicate_evidence(evidence_list: list[dict[str, Any]]) -> list[dict[str, 
         )
         score = float(evidence.get("score", 0.0) or 0.0)
         if key not in best_by_key or score > float(best_by_key[key].get("score", 0.0) or 0.0):
-            best_by_key[key] = {
+            best_by_key[key] = sanitize_report_payload({
                 "doc_title": evidence.get("doc_title") or evidence.get("source") or "",
                 "page": evidence.get("page"),
                 "risk_type": evidence.get("risk_type", ""),
@@ -137,7 +139,7 @@ def deduplicate_evidence(evidence_list: list[dict[str, Any]]) -> list[dict[str, 
                 "keyword": evidence.get("keyword", ""),
                 "score": round(score, 3),
                 "snippet": evidence.get("snippet", ""),
-            }
+            })
 
     rows = list(best_by_key.values())
     rows.sort(key=lambda item: item.get("score", 0.0), reverse=True)
@@ -150,20 +152,20 @@ def build_sentence_rewrite_suggestions(risks: list[dict[str, Any]], missing: lis
     for risk in risks:
         risk_type = str(risk.get("risk_type", ""))
         suggestion = risk.get("rewrite_hint") or DEFAULT_SUGGESTIONS.get(risk_type) or "조건과 적용 범위를 함께 표시해 주세요."
-        suggestions.append({
+        suggestions.append(sanitize_report_payload({
             "problem_sentence": risk.get("problem_sentence", ""),
             "problem_expression": risk.get("problem_expression", ""),
             "why": risk.get("reason", ""),
             "suggested_sentence": suggestion,
-        })
+        }))
 
     for item in missing:
-        suggestions.append({
+        suggestions.append(sanitize_report_payload({
             "problem_sentence": "추출 문구에서 관련 고지 확인 필요",
             "problem_expression": item.get("disclaimer", ""),
             "why": item.get("why", ""),
             "suggested_sentence": item.get("suggestion", ""),
-        })
+        }))
 
     return suggestions
 
@@ -221,7 +223,7 @@ def build_user_view_model(result: dict[str, Any]) -> dict[str, Any]:
     risk_level = result.get("risk_level") or report.get("judgment", {}).get("risk_level", "Pass")
     guardrail_status = result.get("guardrail_status") or report.get("guardrail", {}).get("guardrail_status", "ok")
 
-    return {
+    return sanitize_report_payload({
         "is_pass": pass_case,
         "final_decision": level_label(risk_level),
         "risk_level": risk_level,
@@ -247,5 +249,4 @@ def build_user_view_model(result: dict[str, Any]) -> dict[str, Any]:
             "evidence_list": raw_evidence,
             "saved_result": result.get("saved_result", {}),
         },
-    }
-
+    })

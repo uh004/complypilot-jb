@@ -5,6 +5,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from core.report.debug_payload import build_developer_debug_payload
 from core.report.view_model import build_user_view_model
 from graph.workflow import build_compliance_graph
 
@@ -168,16 +169,5 @@ if st.button("준법 검토 실행", type="primary", use_container_width=True):
     st.subheader("보고서 다운로드")
     render_pdf_download(saved_result)
 
-    with st.expander("개발자용 Raw State"):
-        st.json({
-            "raw_state": final_state,
-            "raw_detected_risks": view_model.get("developer", {}).get("detected_risks", []),
-            "raw_evidence_list": view_model.get("developer", {}).get("evidence_list", []),
-            "internal_saved_result": {
-                "json_path": saved_result.get("json_path", ""),
-                "csv_path": saved_result.get("csv_path", ""),
-                "pdf_path": saved_result.get("pdf_path", ""),
-                "status": saved_result.get("status", ""),
-                "error": saved_result.get("error", ""),
-            },
-        })
+    with st.expander("개발자용 Debug Summary"):
+        st.json(build_developer_debug_payload(final_state, view_model, saved_result))

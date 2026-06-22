@@ -10,6 +10,7 @@ from typing import Any
 
 from core.paths import REPORTS_DIR
 from core.report.save_report import save_report_outputs
+from core.report.sanitize import sanitize_report_payload
 from core.report.view_model import build_user_view_model
 from core.state import ComplianceState
 
@@ -66,7 +67,7 @@ def build_review_points(state: ComplianceState) -> list[dict[str, Any]]:
 def build_detected_risk_rows(detected_risks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows = []
     for index, risk in enumerate(detected_risks, start=1):
-        rows.append({
+        rows.append(sanitize_report_payload({
             "no": index,
             "keyword": risk.get("keyword", ""),
             "keywords": risk.get("keywords", []),
@@ -77,21 +78,21 @@ def build_detected_risk_rows(detected_risks: list[dict[str, Any]]) -> list[dict[
             "matched_sentences": risk.get("matched_sentences", []),
             "match_count": risk.get("match_count", 1),
             "rule_id": risk.get("rule_id", ""),
-        })
+        }))
     return rows
 
 
 def build_missing_disclaimer_rows(missing_disclaimers: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows = []
     for index, item in enumerate(missing_disclaimers, start=1):
-        rows.append({
+        rows.append(sanitize_report_payload({
             "no": index,
             "disclaimer": item.get("disclaimer", ""),
             "base_level": item.get("base_level", "Medium"),
             "reason": item.get("reason", ""),
             "checked_keywords": item.get("checked_keywords", []),
             "recommended_text": item.get("recommended_text", ""),
-        })
+        }))
     return rows
 
 
@@ -99,7 +100,7 @@ def build_evidence_rows(evidence_list: list[dict[str, Any]]) -> list[dict[str, A
     rows = []
     for index, evidence in enumerate(evidence_list, start=1):
         page = evidence.get("page")
-        rows.append({
+        rows.append(sanitize_report_payload({
             "no": index,
             "risk_type": evidence.get("risk_type", ""),
             "keyword": evidence.get("keyword", ""),
@@ -108,7 +109,7 @@ def build_evidence_rows(evidence_list: list[dict[str, Any]]) -> list[dict[str, A
             "doc_title": evidence.get("doc_title", evidence.get("source", "")),
             "page": page + 1 if isinstance(page, int) else page,
             "snippet": evidence.get("snippet", ""),
-        })
+        }))
     return rows
 
 
@@ -185,6 +186,7 @@ def report_builder_node(state: ComplianceState) -> ComplianceState:
     if updated_state.get("hitl_detail"):
         report["hitl"] = updated_state["hitl_detail"]
 
+    report = sanitize_report_payload(report)
     updated_state["report"] = report
     updated_state["report_tables"] = build_report_tables(report)
     updated_state["next_action"] = "save_result"

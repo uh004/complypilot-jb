@@ -10,10 +10,12 @@ from typing import Any
 
 from core.paths import REPORTS_DIR
 from core.report.pdf_report import generate_pdf_report
+from core.report.sanitize import sanitize_report_payload
 from core.report.view_model import build_user_view_model
 
 
 def flatten_report_for_csv(report: dict[str, Any]) -> list[dict[str, Any]]:
+    report = sanitize_report_payload(report)
     rows = []
     judgment = report.get("judgment", {})
     rows.append({
@@ -45,6 +47,7 @@ def save_report_outputs(report: dict[str, Any], result: dict[str, Any]) -> dict[
     json_path = REPORTS_DIR / f"{report_id}_final.json"
     csv_path = REPORTS_DIR / f"{report_id}_final.csv"
 
+    report = sanitize_report_payload(report)
     view_model = build_user_view_model({**result, "report": report})
     pdf_path = generate_pdf_report(view_model, result)
     report["view_model"] = view_model
@@ -63,4 +66,3 @@ def save_report_outputs(report: dict[str, Any], result: dict[str, Any]) -> dict[
         "saved_at": datetime.now().isoformat(timespec="seconds"),
         "error": "",
     }
-

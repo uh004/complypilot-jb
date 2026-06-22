@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from core.paths import RULES_DIR
+from core.paths import RULES_DIR, has_openai_key
+from core.prompts.rewrite_prompt import build_rewrite_messages, build_rewrite_prompt_context
+from core.schemas.rewrite_schema import validate_rewrite_output
 from core.state import ComplianceState
 
 
@@ -55,12 +57,9 @@ def build_required_disclaimer(missing_disclaimers: list[dict[str, Any]]) -> str:
     return "\n".join(dict.fromkeys(lines))
 
 
-def rewrite_generator_node(state: ComplianceState) -> ComplianceState:
-    updated_state = dict(state)
-    templates = load_rewrite_templates()
+def build_applied_replacements(detected_risks: list[dict[str, Any]], templates: dict[str, Any]) -> list[dict[str, Any]]:
     applied = []
-
-    for risk in updated_state.get("detected_risks", []):
+    for risk in detected_risks:
         keywords = risk.get("keywords") or [risk.get("keyword", "")]
         keyword = ", ".join(str(item) for item in keywords if item)
         replacement = replacement_for_risk(risk, templates)
@@ -72,13 +71,15 @@ def rewrite_generator_node(state: ComplianceState) -> ComplianceState:
                 "original_sentence": risk.get("matched_sentence", ""),
                 "replacement": replacement,
             })
+    return applied
 
-    required_disclaimer = build_required_disclaimer(updated_state.get("missing_disclaimers", []))
+
+def build_template_rewrite_text(applied_replacements: list[dict[str, Any]], required_disclaimer: str) -> str:
     sections = []
 
-    if applied:
+    if applied_replacements:
         sections.append("[위험 표현 수정 권장]")
-        for item in applied:
+        for item in applied_replacements:
             sections.append(f"- '{item['keyword']}' 표현: {item['replacement']}")
 
     if required_disclaimer:
@@ -89,14 +90,57 @@ def rewrite_generator_node(state: ComplianceState) -> ComplianceState:
         sections.append("[수정안]")
         sections.append("위험 표현 또는 필수 고지 누락 가능성이 뚜렷하게 탐지되지 않았습니다.")
 
-    rewrite_text = "\n".join(sections).strip()
+    return "\n".join(sections).strip()
 
-    updated_state["rewrite_text"] = rewrite_text
-    updated_state["required_disclaimer"] = required_disclaimer or updated_state.get("required_disclaimer", "")
+
+def build_template_rewrite_output(applied_replacements: list[dict[str, Any]], required_disclaimer: str) -> dict[str, Any]:
+    rewrite_text = build_template_rewrite_text(applied_replacements, required_disclaimer)
+    reasoning_summary = "룰 기반 탐지 결과와 템플릿을 사용해 수정 권장 문구를 생성했습니다."
+    payload = {
+        "rewrite_text": rewrite_text,
+        "required_disclaimer": required_disclaimer,
+        "reasoning_summary": reasoning_summary,
+        "applied_replacements": applied_replacements,
+    }
+    return validate_rewrite_output(payload, llm_used=False, fallback_used=True)
+
+
+def try_generate_llm_rewrite(state: ComplianceState, applied_replacements: list[dict[str, Any]], required_disclaimer: str) -> dict[str, Any] | None:
+    if not state.get("enable_llm_rewrite", False) or not has_openai_key():
+        return None
+
+    try:
+        from langchain_openai import ChatOpenAI
+
+        context = build_rewrite_prompt_context(state, applied_replacements, required_disclaimer)
+        messages = build_rewrite_messages(context)
+        model = ChatOpenAI(model=str(state.get("rewrite_model", "gpt-4o-mini")), temperature=0)
+        response = model.invoke(messages)
+        content = getattr(response, "content", "")
+        parsed = validate_rewrite_output(content, llm_used=True, fallback_used=False)
+        return parsed if parsed["is_valid"] else None
+    except Exception:
+        return None
+
+
+def rewrite_generator_node(state: ComplianceState) -> ComplianceState:
+    updated_state = dict(state)
+    templates = load_rewrite_templates()
+    applied = build_applied_replacements(updated_state.get("detected_risks", []), templates)
+    required_disclaimer = build_required_disclaimer(updated_state.get("missing_disclaimers", []))
+    rewrite_output = try_generate_llm_rewrite(updated_state, applied, required_disclaimer)
+    if rewrite_output is None or not rewrite_output.get("is_valid", False):
+        rewrite_output = build_template_rewrite_output(applied, required_disclaimer)
+
+    updated_state["rewrite_text"] = rewrite_output["rewrite_text"]
+    updated_state["required_disclaimer"] = rewrite_output["required_disclaimer"] or updated_state.get("required_disclaimer", "")
     updated_state["rewrite_detail"] = {
-        "method": "template_fallback",
-        "applied_replacements": applied,
-        "llm_used": False,
+        "method": "llm_structured_output" if rewrite_output["llm_used"] else "template_fallback",
+        "applied_replacements": rewrite_output["applied_replacements"],
+        "reasoning_summary": rewrite_output["reasoning_summary"],
+        "llm_used": rewrite_output["llm_used"],
+        "fallback_used": rewrite_output["fallback_used"],
+        "schema_errors": rewrite_output["errors"],
     }
     updated_state["next_action"] = "guardrail_check"
     return updated_state

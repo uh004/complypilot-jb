@@ -55,9 +55,9 @@ def _write_wrapped(page, cursor: dict[str, float], text: str, *, size: int = 10,
     for raw_line in text.splitlines() or [text]:
         line = raw_line.strip()
         while len(line) > width:
-            _write_line(page, cursor, line[:width], size=size, fontfile=fontfile)
+            _write_line(cursor["page"], cursor, line[:width], size=size, fontfile=fontfile)
             line = line[width:]
-        _write_line(page, cursor, line, size=size, fontfile=fontfile)
+        _write_line(cursor["page"], cursor, line, size=size, fontfile=fontfile)
 
 
 def generate_pdf_report(view_model: dict[str, Any], result: dict[str, Any]) -> Path:
@@ -115,4 +115,3 @@ def generate_pdf_report(view_model: dict[str, Any], result: dict[str, Any]) -> P
     doc.save(output_path)
     doc.close()
     return output_path
-
