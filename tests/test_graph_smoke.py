@@ -6,6 +6,16 @@ from pathlib import Path
 from graph.workflow import build_compliance_graph
 
 
+class _UploadedPdfStub:
+    name = "high_card_01.pdf"
+
+    def __init__(self, payload: bytes = b"%PDF-1.4 mock") -> None:
+        self._payload = payload
+
+    def getvalue(self) -> bytes:
+        return self._payload
+
+
 def _mock_retrieve_evidence_for_query(query_item: dict, top_k: int = 3) -> list[dict]:
     return [
         {
@@ -137,7 +147,10 @@ def test_high_card_pdf_extracts_multiple_review_points(tmp_path, monkeypatch) ->
 
     result = build_compliance_graph().invoke(
         {
-            "file_path": "data/samples/high_card_01.pdf",
+            "uploaded_file": _UploadedPdfStub(),
+            "user_product_type": "card",
+            "user_channel": "document",
+            "user_language": "ko",
             "retry_count": 0,
             "max_retry": 2,
         },
