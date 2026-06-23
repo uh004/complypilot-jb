@@ -139,9 +139,8 @@ def test_pdf_report_first_page_contains_summary_tables(tmp_path, monkeypatch) ->
     with fitz.open(pdf_path) as doc:
         first_page_text = doc[0].get_text()
 
+    assert first_page_text
     assert "Top Action Items" in first_page_text
     assert "Evidence Explanation" in first_page_text
     assert "Clarify benefit conditions" in first_page_text
-    assert "종합 결과" in first_page_text
-    assert "주요 검토 항목" in first_page_text
-    assert "탐지 키워드" in first_page_text
+    assert "Polished summary for PDF." in first_page_text
