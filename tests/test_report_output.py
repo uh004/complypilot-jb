@@ -55,6 +55,8 @@ def test_build_evidence_rows_hides_source_path_and_local_doc_title() -> None:
             "score": 0.8,
             "doc_title": "rule.txt",
             "page": 1,
+            "linked_risk_type": "approval_misleading",
+            "evidence_summary": "",
             "snippet": "이 표현은 준법관리자 검토가 필요합니다.",
         }
     ]
@@ -115,6 +117,9 @@ def test_report_builder_node_outputs_sanitized_required_sections() -> None:
 
     assert {"meta", "input", "content", "judgment", "detected_risks", "missing_disclaimers", "evidence", "rewrite", "guardrail", "routing"}.issubset(report)
     assert report["evidence"][0]["doc_title"] == "rule.txt"
+    assert report["report_summary"]["method"] == "template_report_summary"
+    assert report["judgment"]["summary"] == report["report_summary"]["executive_summary"]
+    assert report["report_summary"]["top_action_items"]
     assert "source_path" not in serialized
     assert "C:/Users/USER" not in serialized
     assert "불법입니다" not in serialized

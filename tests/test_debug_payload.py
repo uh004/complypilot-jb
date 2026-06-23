@@ -27,6 +27,10 @@ def test_developer_debug_payload_hides_raw_state_and_local_paths() -> None:
                 "snippet": "This is unlawful.",
             }
         ],
+        "text_repair_detail": {"method": "deterministic_text", "fallback_used": True},
+        "evidence_query_rewrite_detail": {"method": "deterministic_queries", "fallback_used": True},
+        "rewrite_detail": {"method": "template_fallback", "llm_used": False, "fallback_used": True, "plan_method": "template_rewrite_plan"},
+        "report": {"report_summary": {"method": "template_report_summary", "llm_used": False, "fallback_used": True}},
     }
     view_model = {
         "developer": {
@@ -50,6 +54,10 @@ def test_developer_debug_payload_hides_raw_state_and_local_paths() -> None:
     assert "C:/Users" not in payload_text
     assert "illegal" not in payload_text.lower()
     assert "unlawful" not in payload_text.lower()
+    assert payload["ai_features"]["text_repair"]["method"] == "deterministic_text"
+    assert payload["ai_features"]["query_rewrite"]["method"] == "deterministic_queries"
+    assert payload["ai_features"]["rewrite"]["plan_method"] == "template_rewrite_plan"
+    assert payload["ai_features"]["report_summary"]["method"] == "template_report_summary"
     assert payload["saved_result"]["json_file"] == "report.json"
     assert payload["saved_result"]["csv_file"] == "report.csv"
     assert payload["saved_result"]["pdf_file"] == "report.pdf"

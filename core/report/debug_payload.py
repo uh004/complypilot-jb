@@ -22,6 +22,8 @@ def build_developer_debug_payload(
     """Return a compact UI-safe debug summary without raw state or local paths."""
 
     developer = view_model.get("developer", {})
+    report_summary = final_state.get("report", {}).get("report_summary", {})
+    rewrite_detail = final_state.get("rewrite_detail", {})
     payload = {
         "workflow": {
             "status": final_state.get("workflow_status", ""),
@@ -37,6 +39,25 @@ def build_developer_debug_payload(
             "detected_risks": len(final_state.get("detected_risks", [])),
             "missing_disclaimers": len(final_state.get("missing_disclaimers", [])),
             "evidence": len(final_state.get("evidence_list", [])),
+        },
+        "ai_features": {
+            "text_repair": final_state.get("text_repair_detail", {}),
+            "content_detection": final_state.get("detection_detail", {}).get("llm_resolution", {}),
+            "query_rewrite": final_state.get("evidence_query_rewrite_detail", {}),
+            "evidence_rerank": final_state.get("evidence_rerank_detail", {}),
+            "rewrite": {
+                "method": rewrite_detail.get("method", ""),
+                "llm_used": rewrite_detail.get("llm_used", False),
+                "fallback_used": rewrite_detail.get("fallback_used", False),
+                "plan_method": rewrite_detail.get("plan_method", ""),
+                "plan_fallback_used": rewrite_detail.get("plan_fallback_used", False),
+            },
+            "report_summary": {
+                "method": report_summary.get("method", ""),
+                "llm_used": report_summary.get("llm_used", False),
+                "fallback_used": report_summary.get("fallback_used", False),
+                "errors": report_summary.get("errors", []),
+            },
         },
         "debug_samples": {
             "detected_risks": developer.get("detected_risks", [])[:5],

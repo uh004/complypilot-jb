@@ -1,10 +1,13 @@
 from core.tools import retrieval_tools
 from core.tools.retrieval_tools import (
+    apply_deterministic_evidence_summaries,
+    apply_evidence_rerank_selection,
     build_context_snippet,
     build_evidence_queries,
     calculate_evidence_score,
     classify_evidence_quality,
     deduplicate_evidence,
+    expand_rewritten_evidence_queries,
     format_evidence_for_report,
     keyword_score,
     retrieve_evidence_for_query,
@@ -49,6 +52,75 @@ def test_build_evidence_queries_adds_general_query_when_no_risks_exist() -> None
     assert queries[0]["query_type"] == "general"
     assert queries[0]["risk_type"] == "general_review"
     assert queries[0]["keyword"] == "deposit"
+
+
+def test_expand_rewritten_evidence_queries_preserves_original_metadata() -> None:
+    originals = [
+        {
+            "query_type": "detected_risk",
+            "risk_type": "approval_misleading",
+            "keyword": "approval",
+            "query": "original query",
+            "source_item": {"id": 1},
+        }
+    ]
+    rewritten = [
+        {
+            "query_type": "detected_risk",
+            "risk_type": "approval_misleading",
+            "keyword": "approval",
+            "queries": ["rewritten query 1", "rewritten query 2"],
+        }
+    ]
+
+    expanded = expand_rewritten_evidence_queries(originals, rewritten)
+
+    assert [item["query"] for item in expanded] == ["rewritten query 1", "rewritten query 2"]
+    assert expanded[0]["original_query"] == "original query"
+    assert expanded[0]["query_variant"] == "llm_rewrite_1"
+    assert expanded[0]["query_rewrite_used"] is True
+    assert expanded[0]["source_item"] == {"id": 1}
+
+
+def test_apply_deterministic_evidence_summaries_adds_review_context() -> None:
+    evidence = [
+        {
+            "risk_type": "benefit_condition_missing",
+            "keyword": "maximum benefit",
+            "score": 0.5,
+            "snippet": "Benefits vary by monthly usage and exclusions.",
+        }
+    ]
+
+    enriched = apply_deterministic_evidence_summaries(evidence)
+
+    assert enriched[0]["linked_risk_type"] == "benefit_condition_missing"
+    assert "maximum benefit" in enriched[0]["evidence_summary"]
+    assert enriched[0]["rerank_used"] is False
+
+
+def test_apply_evidence_rerank_selection_keeps_unselected_evidence() -> None:
+    evidence = [
+        {"risk_type": "first", "keyword": "A", "score": 0.3, "snippet": "first evidence"},
+        {"risk_type": "second", "keyword": "B", "score": 0.7, "snippet": "second evidence"},
+    ]
+    selected = [
+        {
+            "evidence_id": "e1",
+            "relevance_score": 0.9,
+            "linked_risk_type": "second",
+            "evidence_summary": "Best evidence for second risk.",
+        }
+    ]
+
+    reranked = apply_evidence_rerank_selection(evidence, selected)
+
+    assert len(reranked) == 2
+    assert reranked[0]["risk_type"] == "second"
+    assert reranked[0]["rerank_used"] is True
+    assert reranked[0]["evidence_summary"] == "Best evidence for second risk."
+    assert reranked[1]["risk_type"] == "first"
+    assert reranked[1]["rerank_used"] is False
 
 
 def test_keyword_search_helpers_score_and_snippet_context() -> None:
@@ -153,4 +225,14 @@ def test_evidence_scoring_quality_deduplication_and_report_format() -> None:
     assert classify_evidence_quality(0.3, deduped) == "weak"
     assert classify_evidence_quality(0.9, deduped) == "sufficient"
     assert "source_path" not in report_item
-    assert set(report_item) == {"doc_title", "page", "snippet", "score", "retrieval_method", "risk_type", "keyword"}
+    assert set(report_item) == {
+        "doc_title",
+        "page",
+        "snippet",
+        "score",
+        "retrieval_method",
+        "risk_type",
+        "keyword",
+        "linked_risk_type",
+        "evidence_summary",
+    }

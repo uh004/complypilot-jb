@@ -26,7 +26,7 @@ def save_uploaded_file(uploaded_file) -> Path:
     return path
 
 
-def build_initial_state(uploaded_file, input_text: str, product_type: str, channel: str, language: str) -> dict | None:
+def build_initial_state(uploaded_file, input_text: str, product_type: str, channel: str, language: str, ai_options: dict | None = None) -> dict | None:
     state = {"retry_count": 0, "max_retry": 2}
 
     if uploaded_file is not None:
@@ -42,6 +42,9 @@ def build_initial_state(uploaded_file, input_text: str, product_type: str, chann
         state["user_channel"] = channel
     if language != "auto":
         state["user_language"] = language
+
+    for key, value in (ai_options or {}).items():
+        state[key] = bool(value)
 
     return state
 
@@ -75,13 +78,20 @@ def render_extraction_summary(view_model: dict) -> None:
 
 
 def render_priority_actions(view_model: dict) -> None:
+    polished_actions = view_model.get("top_action_items", [])
     points = view_model.get("grouped_review_points", [])
     missing = view_model.get("missing_disclaimers", [])
-    if not points and not missing:
+    if not polished_actions and not points and not missing:
         return
 
     st.subheader("우선 수정할 것")
     top_actions = []
+    for action in polished_actions[:4]:
+        top_actions.append({
+            "title": action.get("title", "寃???꾩슂"),
+            "detail": action.get("recommended_action") or action.get("reason", ""),
+            "meta": f"{action.get('priority', 'Medium')} / {action.get('reason', '')}",
+        })
     for point in points[:3]:
         top_actions.append({
             "title": point.get("risk_type_label", "검토 필요"),
@@ -213,6 +223,16 @@ with st.sidebar:
     product_type = st.selectbox("상품 유형", ["auto", "loan", "deposit", "card", "investment", "event", "unknown"])
     channel = st.selectbox("채널", ["auto", "document", "image_ad", "sns", "landing_page", "short_ad", "general_text"])
     language = st.selectbox("언어", ["auto", "ko", "en", "ko-en"])
+    with st.expander("AI enhancement options", expanded=False):
+        st.caption("Default is off. Each option has deterministic fallback.")
+        ai_options = {
+            "enable_llm_text_repair": st.checkbox("Text repair", value=False),
+            "enable_llm_content_detection": st.checkbox("Content enum resolver", value=False),
+            "enable_llm_query_rewrite": st.checkbox("Evidence query rewrite", value=False),
+            "enable_llm_evidence_rerank": st.checkbox("Evidence rerank summary", value=False),
+            "enable_llm_rewrite": st.checkbox("Rewrite generation", value=False),
+            "enable_llm_report_summary": st.checkbox("Report summary polish", value=False),
+        }
 
 tab_file, tab_text = st.tabs(["파일 업로드", "텍스트 직접 입력"])
 
@@ -227,7 +247,7 @@ with tab_text:
     )
 
 if st.button("준법 검토 실행", type="primary", use_container_width=True):
-    initial_state = build_initial_state(uploaded_file, input_text, product_type, channel, language)
+    initial_state = build_initial_state(uploaded_file, input_text, product_type, channel, language, ai_options)
     if initial_state is None:
         st.warning("파일을 업로드하거나 텍스트를 입력해 주세요.")
         st.stop()

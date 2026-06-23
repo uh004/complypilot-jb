@@ -2,9 +2,9 @@
 
 ## Status
 
-POC2 first-pass enhancement is complete.
+POC2 AI enhancement pass is functionally complete for the planned node upgrades in `NODE_AI_ENHANCEMENT_REVIEW.md`.
 
-The current implementation keeps the POC1 LangGraph workflow order and improves each major node through harness tests, deterministic tools, structured rewrite output, report sanitization, and end-to-end smoke coverage.
+The implementation keeps the POC1 LangGraph workflow order and adds optional AI-assisted chains only where allowed. All compliance-critical decisions remain deterministic.
 
 ## Preserved Workflow
 
@@ -33,17 +33,64 @@ ok -> report_output
 max retry or extraction check -> HITL/report path
 ```
 
-## Completed Enhancements
+## Completed AI-Assisted Enhancements
 
-- `risk_detector` now calls deterministic rule tools in `core/tools/rule_tools.py`.
-- `text_extractor` now uses parsing tools in `core/tools/parsing_tools.py`.
-- `evidence_retriever` now uses retrieval tools in `core/tools/retrieval_tools.py`.
-- `rewrite_generator` now uses prompt/schema/fallback structure.
-- `guardrail_checker` and `router` use stable status behavior.
-- Report, view model, CSV, PDF, and Streamlit debug output sanitize local paths and final legal-judgment wording.
-- PDF generation handles long wrapped evidence across pages.
-- Graph smoke tests verify sample text reaches saved JSON/CSV/PDF output.
-- Graph order tests verify workflow order and router retry edges.
+- `text_extractor`: optional text repair chain with structured parser and confidence fallback.
+- `content_detector`: optional enum-only ambiguity resolver for product/channel/language.
+- `evidence_retriever`: optional query rewrite plus evidence rerank/summary.
+- `rewrite_generator`: rewrite plan plus draft flow with template fallback.
+- `report_output`: executive summary, top action items, and evidence explanation polish.
+- `Streamlit`: AI feature toggles in the sidebar, all defaulting to off.
+- `debug_payload`: compact AI feature status without raw state, local paths, or legal assertion wording.
+
+## Deterministic Boundaries Preserved
+
+The following remain rule-based and must not be delegated to an LLM or Agent:
+
+- `risk_detector`
+- `risk_judge`
+- `guardrail_checker`
+- `router`
+- `criteria_mapper`
+- `file_intake`
+- `save_result`
+
+Risk level still follows deterministic priority:
+
+```text
+High risk item exists -> High
+missing_disclaimers exists -> at least Medium
+Pass only when detected_risks and missing_disclaimers are both empty
+High > Medium > Low > Pass
+```
+
+## New Files Added
+
+Prompts:
+
+- `core/prompts/query_rewrite_prompt.py`
+- `core/prompts/evidence_rerank_prompt.py`
+- `core/prompts/rewrite_plan_prompt.py`
+- `core/prompts/report_prompt.py`
+- `core/prompts/content_detection_prompt.py`
+- `core/prompts/text_repair_prompt.py`
+
+Schemas:
+
+- `core/schemas/retrieval_schema.py`
+- `core/schemas/rewrite_plan_schema.py`
+- `core/schemas/report_schema.py`
+- `core/schemas/content_detection_schema.py`
+- `core/schemas/text_repair_schema.py`
+
+Tests:
+
+- `tests/test_retrieval_schema.py`
+- `tests/test_rewrite_plan_schema.py`
+- `tests/test_report_schema.py`
+- `tests/test_content_detection_schema.py`
+- `tests/test_content_detector.py`
+- `tests/test_text_repair_schema.py`
 
 ## Validation
 
@@ -51,39 +98,41 @@ Latest validation:
 
 ```text
 python -m pytest
-74 passed
+107 passed
 ```
 
-Additional checks performed:
+Targeted checks also passed during implementation:
 
 ```text
-python -m py_compile app.py
-sample graph input -> completed / High / saved
-streamlit run app.py -> server startup log confirmed
+tests/test_pdf_report.py
+tests/test_content_detector.py
+tests/test_content_detection_schema.py
+tests/test_text_extractor.py
+tests/test_text_repair_schema.py
+tests/test_debug_payload.py
 ```
+
+## Demo Notes
+
+Default demo behavior is deterministic because all Streamlit AI toggles default to off.
+
+Optional AI toggles are available in the sidebar:
+
+- Text repair
+- Content enum resolver
+- Evidence query rewrite
+- Evidence rerank summary
+- Rewrite generation
+- Report summary polish
+
+If an option is enabled but API access fails or structured output is invalid, the workflow falls back to deterministic output and still generates the report.
 
 ## Remaining Optional Work
 
-These are not blockers for the POC2 first-pass demo:
+These are post-POC refinements, not blockers:
 
-- Split `content_detector` into a dedicated detection tool module.
-- Split `criteria_mapper` into a criteria/rule loading tool module.
-- Split `risk_judge` into a scoring tool module.
-- Add demo input fixtures under `data/eval_cases/`.
-- Add a short operator guide for the Streamlit demo flow.
-
-## Demo Recommendation
-
-Use a short risky loan sample for demo smoke:
-
-```text
-누구나 승인 가능한 최저금리 대출입니다. 지금 신청하세요.
-```
-
-Expected high-level result:
-
-```text
-workflow_status: completed
-risk_level: High
-saved_result.status: saved
-```
+- Add operator-facing documentation for when to enable each AI toggle.
+- Add curated eval cases under `data/eval_cases/`.
+- Add a small Streamlit smoke checklist for sample PDFs.
+- Consider optional explanation-only polish for `risk_reason`; risk level must remain deterministic.
+- Improve visual styling of the Streamlit report page after functional validation.

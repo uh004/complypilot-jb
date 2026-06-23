@@ -6,7 +6,9 @@ import json
 from typing import Any
 
 from core.paths import RULES_DIR, has_openai_key
+from core.prompts.rewrite_plan_prompt import build_rewrite_plan_context, build_rewrite_plan_messages
 from core.prompts.rewrite_prompt import build_rewrite_messages, build_rewrite_prompt_context
+from core.schemas.rewrite_plan_schema import validate_rewrite_plan_output
 from core.schemas.rewrite_schema import validate_rewrite_output
 from core.state import ComplianceState
 
@@ -105,6 +107,52 @@ def build_template_rewrite_output(applied_replacements: list[dict[str, Any]], re
     return validate_rewrite_output(payload, llm_used=False, fallback_used=True)
 
 
+def build_template_rewrite_plan(applied_replacements: list[dict[str, Any]], required_disclaimer: str) -> dict[str, Any]:
+    planned_replacements = [
+        {
+            "keyword": item.get("keyword", ""),
+            "risk_type": item.get("risk_type", ""),
+            "original_sentence": item.get("original_sentence", ""),
+            "replacement_goal": item.get("replacement", ""),
+            "required_condition": required_disclaimer,
+        }
+        for item in applied_replacements
+    ]
+    payload = {
+        "rewrite_strategy": "Use deterministic rule matches and template replacement guidance.",
+        "planned_replacements": planned_replacements,
+        "disclaimer_strategy": "Add required disclaimer guidance." if required_disclaimer else "No missing disclaimer guidance was detected.",
+        "reasoning_summary": "Template rewrite plan generated from rule-based detection results.",
+    }
+    parsed = validate_rewrite_plan_output(payload, llm_used=False, fallback_used=True)
+    parsed["method"] = "template_rewrite_plan"
+    return parsed
+
+
+def try_generate_llm_rewrite_plan(
+    model: Any,
+    state: ComplianceState,
+    applied_replacements: list[dict[str, Any]],
+    required_disclaimer: str,
+) -> dict[str, Any]:
+    try:
+        context = build_rewrite_plan_context(state, applied_replacements, required_disclaimer)
+        messages = build_rewrite_plan_messages(context)
+        response = model.invoke(messages)
+        content = getattr(response, "content", "")
+        parsed = validate_rewrite_plan_output(content, llm_used=True, fallback_used=False)
+        if parsed["is_valid"]:
+            parsed["method"] = "llm_rewrite_plan"
+            return parsed
+        fallback = build_template_rewrite_plan(applied_replacements, required_disclaimer)
+        fallback["errors"] = parsed["errors"]
+        return fallback
+    except Exception as exc:
+        fallback = build_template_rewrite_plan(applied_replacements, required_disclaimer)
+        fallback["errors"] = [str(exc)]
+        return fallback
+
+
 def try_generate_llm_rewrite(state: ComplianceState, applied_replacements: list[dict[str, Any]], required_disclaimer: str) -> dict[str, Any] | None:
     if not state.get("enable_llm_rewrite", False) or not has_openai_key():
         return None
@@ -112,12 +160,16 @@ def try_generate_llm_rewrite(state: ComplianceState, applied_replacements: list[
     try:
         from langchain_openai import ChatOpenAI
 
-        context = build_rewrite_prompt_context(state, applied_replacements, required_disclaimer)
-        messages = build_rewrite_messages(context)
         model = ChatOpenAI(model=str(state.get("rewrite_model", "gpt-4o-mini")), temperature=0)
+        rewrite_plan = try_generate_llm_rewrite_plan(model, state, applied_replacements, required_disclaimer)
+        context = build_rewrite_prompt_context(state, applied_replacements, required_disclaimer, rewrite_plan)
+        messages = build_rewrite_messages(context)
         response = model.invoke(messages)
         content = getattr(response, "content", "")
         parsed = validate_rewrite_output(content, llm_used=True, fallback_used=False)
+        if parsed["is_valid"]:
+            parsed["rewrite_plan"] = rewrite_plan
+            parsed["plan_used"] = True
         return parsed if parsed["is_valid"] else None
     except Exception:
         return None
@@ -131,12 +183,20 @@ def rewrite_generator_node(state: ComplianceState) -> ComplianceState:
     rewrite_output = try_generate_llm_rewrite(updated_state, applied, required_disclaimer)
     if rewrite_output is None or not rewrite_output.get("is_valid", False):
         rewrite_output = build_template_rewrite_output(applied, required_disclaimer)
+        rewrite_output["rewrite_plan"] = build_template_rewrite_plan(applied, required_disclaimer)
+        rewrite_output["plan_used"] = False
 
     updated_state["rewrite_text"] = rewrite_output["rewrite_text"]
     updated_state["required_disclaimer"] = rewrite_output["required_disclaimer"] or updated_state.get("required_disclaimer", "")
+    rewrite_plan = rewrite_output.get("rewrite_plan", {})
     updated_state["rewrite_detail"] = {
         "method": "llm_structured_output" if rewrite_output["llm_used"] else "template_fallback",
         "applied_replacements": rewrite_output["applied_replacements"],
+        "rewrite_plan": rewrite_plan,
+        "plan_used": bool(rewrite_output.get("plan_used", False)),
+        "plan_method": rewrite_plan.get("method", "") if isinstance(rewrite_plan, dict) else "",
+        "plan_fallback_used": bool(rewrite_plan.get("fallback_used", False)) if isinstance(rewrite_plan, dict) else False,
+        "plan_schema_errors": rewrite_plan.get("errors", []) if isinstance(rewrite_plan, dict) else [],
         "reasoning_summary": rewrite_output["reasoning_summary"],
         "llm_used": rewrite_output["llm_used"],
         "fallback_used": rewrite_output["fallback_used"],

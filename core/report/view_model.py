@@ -196,11 +196,11 @@ def deduplicate_evidence(evidence_list: list[dict[str, Any]]) -> list[dict[str, 
                 "page": evidence.get("page"),
                 "risk_type": evidence.get("risk_type", ""),
                 "risk_type_label": risk_type_label(str(evidence.get("risk_type", ""))),
-                "linked_risk_type": evidence.get("risk_type", ""),
+                "linked_risk_type": evidence.get("linked_risk_type") or evidence.get("risk_type", ""),
                 "keyword": evidence.get("keyword", ""),
                 "score": round(score, 3),
                 "snippet": evidence.get("snippet", ""),
-                "evidence_summary": f"{risk_type_label(str(evidence.get('risk_type', '')))} 관련 근거: {str(evidence.get('snippet', ''))[:120]}",
+                "evidence_summary": evidence.get("evidence_summary") or f"{risk_type_label(str(evidence.get('risk_type', '')))} 관련 근거: {str(evidence.get('snippet', ''))[:120]}",
             })
 
     rows = list(best_by_key.values())
@@ -323,6 +323,7 @@ def build_review_summary(result: dict[str, Any], risks: list[dict[str, Any]], mi
 
 def build_user_view_model(result: dict[str, Any]) -> dict[str, Any]:
     report = result.get("report", {})
+    report_summary = result.get("report_summary_detail") or report.get("report_summary", {}) or report.get("judgment", {}).get("summary_detail", {})
     raw_risks = result.get("detected_risks") or report.get("detected_risks", [])
     raw_missing = result.get("missing_disclaimers") or report.get("missing_disclaimers", [])
     raw_evidence = result.get("evidence_list") or report.get("evidence", [])
@@ -350,7 +351,10 @@ def build_user_view_model(result: dict[str, Any]) -> dict[str, Any]:
         "action_required_label": "필요" if result.get("action_required") else "없음",
         "compliance_review_label": "필요" if result.get("compliance_review_required") else "없음",
         "guardrail_label": status_label(guardrail_status),
-        "summary": build_review_summary(result, grouped_review_points, missing, pass_case),
+        "summary": report_summary.get("executive_summary") or report.get("judgment", {}).get("summary") or build_review_summary(result, grouped_review_points, missing, pass_case),
+        "top_action_items": report_summary.get("top_action_items", []),
+        "evidence_explanation": report_summary.get("evidence_explanation", ""),
+        "report_summary_detail": report_summary,
         "document": {
             "file_name": result.get("file_name") or report.get("input", {}).get("file_name", ""),
             "file_type": result.get("file_type") or report.get("input", {}).get("file_type", ""),

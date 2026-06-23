@@ -75,6 +75,48 @@ def build_evidence_queries(state: ComplianceState) -> list[dict[str, Any]]:
     return query_items
 
 
+def expand_rewritten_evidence_queries(
+    original_queries: list[dict[str, Any]],
+    rewritten_items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    rewritten_by_key = {
+        (
+            item.get("query_type", ""),
+            item.get("risk_type", ""),
+            item.get("keyword", ""),
+        ): item
+        for item in rewritten_items
+    }
+    expanded = []
+
+    for original in original_queries:
+        key = (
+            original.get("query_type", ""),
+            original.get("risk_type", ""),
+            original.get("keyword", ""),
+        )
+        rewritten = rewritten_by_key.get(key)
+        queries = rewritten.get("queries", []) if rewritten else []
+
+        if not queries:
+            expanded.append(original)
+            continue
+
+        for index, query in enumerate(queries[:4], start=1):
+            query_text = str(query or "").strip()
+            if not query_text:
+                continue
+            expanded.append({
+                **original,
+                "query": query_text,
+                "original_query": original.get("query", ""),
+                "query_variant": f"llm_rewrite_{index}",
+                "query_rewrite_used": True,
+            })
+
+    return expanded or original_queries
+
+
 def load_chroma_vectorstore():
     if not has_openai_key() or not CHROMA_DB_DIR.exists():
         return None
@@ -202,7 +244,7 @@ def retrieve_evidence_for_query(query_item: dict[str, Any], top_k: int = 3) -> l
     results = search_chroma_evidence(query_item["query"], top_k=top_k) or search_fallback_evidence(query_item["query"], top_k=top_k)
     evidence_items = []
     for result in results:
-        evidence_items.append({
+        evidence_item = {
             "query_type": query_item["query_type"],
             "risk_type": query_item["risk_type"],
             "keyword": query_item["keyword"],
@@ -214,7 +256,12 @@ def retrieve_evidence_for_query(query_item: dict[str, Any], top_k: int = 3) -> l
             "doc_title": result.get("doc_title", result.get("source", "")),
             "page": result.get("page"),
             "snippet": result.get("snippet", ""),
-        })
+        }
+        if query_item.get("query_rewrite_used"):
+            evidence_item["original_query"] = query_item.get("original_query", "")
+            evidence_item["query_variant"] = query_item.get("query_variant", "")
+            evidence_item["query_rewrite_used"] = True
+        evidence_items.append(evidence_item)
     return evidence_items
 
 
@@ -240,6 +287,65 @@ def calculate_evidence_score(evidence_list: list[dict[str, Any]]) -> float:
     return round(sum(scores) / len(scores), 3)
 
 
+def build_evidence_summary(evidence: dict[str, Any]) -> str:
+    risk_type = str(evidence.get("risk_type", "") or "general_review")
+    keyword = str(evidence.get("keyword", "") or "").strip()
+    snippet = normalize_extracted_text(str(evidence.get("snippet", "") or ""))
+    prefix = f"{risk_type} review evidence"
+    if keyword:
+        prefix += f" for '{keyword}'"
+    if snippet:
+        return f"{prefix}: {snippet[:160]}"
+    return prefix
+
+
+def apply_deterministic_evidence_summaries(evidence_list: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    enriched = []
+    for evidence in evidence_list:
+        enriched.append({
+            **evidence,
+            "linked_risk_type": evidence.get("linked_risk_type") or evidence.get("risk_type", ""),
+            "evidence_summary": evidence.get("evidence_summary") or build_evidence_summary(evidence),
+            "rerank_relevance_score": evidence.get("rerank_relevance_score", evidence.get("score", 0.0)),
+            "rerank_used": bool(evidence.get("rerank_used", False)),
+        })
+    return enriched
+
+
+def apply_evidence_rerank_selection(
+    evidence_list: list[dict[str, Any]],
+    selected_evidence: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    evidence_by_id = {f"e{index}": item for index, item in enumerate(evidence_list)}
+    reranked = []
+    selected_ids = set()
+
+    for selected in selected_evidence:
+        evidence_id = str(selected.get("evidence_id", ""))
+        evidence = evidence_by_id.get(evidence_id)
+        if not evidence:
+            continue
+        selected_ids.add(evidence_id)
+        reranked.append({
+            **evidence,
+            "linked_risk_type": selected.get("linked_risk_type") or evidence.get("risk_type", ""),
+            "evidence_summary": selected.get("evidence_summary") or build_evidence_summary(evidence),
+            "rerank_relevance_score": selected.get("relevance_score", evidence.get("score", 0.0)),
+            "rerank_used": True,
+        })
+
+    if not reranked:
+        return apply_deterministic_evidence_summaries(evidence_list)
+
+    reranked.sort(key=lambda item: item.get("rerank_relevance_score", item.get("score", 0.0)), reverse=True)
+    remaining = [
+        evidence
+        for evidence_id, evidence in evidence_by_id.items()
+        if evidence_id not in selected_ids
+    ]
+    return [*reranked, *apply_deterministic_evidence_summaries(remaining)]
+
+
 def format_evidence_for_report(evidence: dict[str, Any]) -> dict[str, Any]:
     page = evidence.get("page")
     return {
@@ -250,4 +356,6 @@ def format_evidence_for_report(evidence: dict[str, Any]) -> dict[str, Any]:
         "retrieval_method": evidence.get("retrieval_method", ""),
         "risk_type": evidence.get("risk_type", ""),
         "keyword": evidence.get("keyword", ""),
+        "linked_risk_type": evidence.get("linked_risk_type", evidence.get("risk_type", "")),
+        "evidence_summary": evidence.get("evidence_summary", ""),
     }

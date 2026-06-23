@@ -13,12 +13,13 @@ It accepts uploaded files or direct text, extracts the content, detects product/
 - Rule-based risk detection and missing-disclaimer detection
 - Evidence retrieval from Chroma DB with fallback regulation documents
 - Rule-based risk judgment
-- Template-based rewrite suggestions
+- Optional AI-assisted text repair, content detection, evidence query rewrite/rerank, rewrite generation, and report summary polish
+- Template-based rewrite suggestions with deterministic fallback
 - Guardrail checks for extraction quality, legal assertions, and evidence sufficiency
 - User-facing report view model in `core/report/view_model.py`
 - User-facing PDF report generation in `core/report/pdf_report.py`
 - Internal JSON/CSV saving plus PDF download support in `core/report/save_report.py`
-- Streamlit report UI with a developer-only raw state expander
+- Streamlit report UI with AI enhancement toggles and a sanitized developer debug summary
 
 ## Current Project Layout
 
@@ -42,6 +43,29 @@ It accepts uploaded files or direct text, extracts the content, detects product/
 5. Retrieve evidence from the regulation store.
 6. Produce a user-facing summary, review points, rewrite suggestions, and PDF report.
 7. Download the PDF report from the Streamlit UI.
+
+## AI Enhancement Options
+
+AI-assisted features are optional and default to off in the Streamlit sidebar.
+
+Available toggles:
+
+- Text repair
+- Content enum resolver
+- Evidence query rewrite
+- Evidence rerank summary
+- Rewrite generation
+- Report summary polish
+
+Each AI feature uses structured output validation and deterministic fallback. If an API key is missing, the model call fails, or the model returns invalid JSON, the workflow continues with rule-based/template output and still generates the report.
+
+Compliance-critical decisions remain deterministic:
+
+- Risk detection
+- Missing-disclaimer detection
+- Risk level judgment
+- Guardrail decision
+- Router decision
 
 ## Run
 
@@ -76,4 +100,3 @@ python -m pytest
 - The app shows user-facing terms such as `최종 판정`, `조치 필요`, `준법 검토`, and `안전성 점검`.
 - Pass cases hide raw developer artifacts from the main screen and show the message `수정이 필요한 문구가 발견되지 않았습니다.`
 - Developer-only data remains available inside the `개발자용 Raw State` expander.
-

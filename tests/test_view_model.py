@@ -182,3 +182,30 @@ def test_view_model_adds_evidence_summary_and_linked_risk_type() -> None:
     evidence = view_model["evidence"][0]
     assert evidence["linked_risk_type"] == "benefit_scope_misleading"
     assert "Benefits should be presented" in evidence["evidence_summary"]
+
+
+def test_view_model_prefers_report_summary_detail() -> None:
+    view_model = build_user_view_model(
+        {
+            "risk_level": "High",
+            "report": {
+                "report_summary": {
+                    "executive_summary": "Polished executive summary.",
+                    "top_action_items": [
+                        {
+                            "title": "Clarify condition",
+                            "reason": "Condition may be omitted.",
+                            "recommended_action": "Show condition together.",
+                            "priority": "High",
+                        }
+                    ],
+                    "evidence_explanation": "Evidence is linked.",
+                    "method": "template_report_summary",
+                }
+            },
+        }
+    )
+
+    assert view_model["summary"] == "Polished executive summary."
+    assert view_model["top_action_items"][0]["title"] == "Clarify condition"
+    assert view_model["evidence_explanation"] == "Evidence is linked."

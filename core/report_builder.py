@@ -8,10 +8,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from core.paths import REPORTS_DIR
+from core.paths import REPORTS_DIR, has_openai_key
+from core.prompts.report_prompt import build_report_summary_context, build_report_summary_messages
 from core.report.save_report import save_report_outputs
 from core.report.sanitize import sanitize_report_payload
 from core.report.view_model import build_user_view_model
+from core.schemas.report_schema import validate_report_summary_output
 from core.state import ComplianceState
 
 
@@ -64,6 +66,76 @@ def build_review_points(state: ComplianceState) -> list[dict[str, Any]]:
     return points
 
 
+def build_template_top_action_items(review_points: list[dict[str, Any]]) -> list[dict[str, str]]:
+    actions = []
+    for point in review_points[:5]:
+        actions.append({
+            "title": str(point.get("title", "") or point.get("type", "")),
+            "reason": str(point.get("why", "")),
+            "recommended_action": str(point.get("suggestion", "")) or "조건, 한도, 제외 대상을 함께 확인해 주세요.",
+            "priority": str(point.get("level", "Medium") or "Medium"),
+        })
+    return actions
+
+
+def build_template_report_summary(
+    state: ComplianceState,
+    review_points: list[dict[str, Any]],
+    evidence_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    evidence_count = len(evidence_rows)
+    if evidence_count:
+        evidence_explanation = f"관련 규정 근거 {evidence_count}건을 기준으로 검토 항목과 연결했습니다."
+    else:
+        evidence_explanation = "관련 규정 근거가 충분하지 않아 준법 담당자 확인이 필요합니다."
+
+    payload = {
+        "executive_summary": make_report_summary(state),
+        "top_action_items": build_template_top_action_items(review_points),
+        "evidence_explanation": evidence_explanation,
+        "reasoning_summary": "Deterministic report summary generated from rule, evidence, and rewrite outputs.",
+    }
+    parsed = validate_report_summary_output(payload, llm_used=False, fallback_used=True)
+    parsed["method"] = "template_report_summary"
+    return parsed
+
+
+def try_generate_llm_report_summary(
+    state: ComplianceState,
+    deterministic_summary: str,
+    review_points: list[dict[str, Any]],
+    evidence_rows: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if not state.get("enable_llm_report_summary", False) or not has_openai_key():
+        return None
+
+    try:
+        from langchain_openai import ChatOpenAI
+
+        context = build_report_summary_context(state, deterministic_summary, review_points, evidence_rows)
+        messages = build_report_summary_messages(context)
+        model = ChatOpenAI(model=str(state.get("report_summary_model", "gpt-4o-mini")), temperature=0)
+        response = model.invoke(messages)
+        content = getattr(response, "content", "")
+        parsed = validate_report_summary_output(content, llm_used=True, fallback_used=False)
+        if parsed["is_valid"]:
+            parsed["method"] = "llm_report_summary"
+            return parsed
+        return None
+    except Exception:
+        return None
+
+
+def build_report_summary_detail(
+    state: ComplianceState,
+    review_points: list[dict[str, Any]],
+    evidence_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    fallback = build_template_report_summary(state, review_points, evidence_rows)
+    llm_summary = try_generate_llm_report_summary(state, fallback["executive_summary"], review_points, evidence_rows)
+    return llm_summary or fallback
+
+
 def build_detected_risk_rows(detected_risks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows = []
     for index, risk in enumerate(detected_risks, start=1):
@@ -109,6 +181,8 @@ def build_evidence_rows(evidence_list: list[dict[str, Any]]) -> list[dict[str, A
             "doc_title": evidence.get("doc_title", evidence.get("source", "")),
             "page": page + 1 if isinstance(page, int) else page,
             "snippet": evidence.get("snippet", ""),
+            "linked_risk_type": evidence.get("linked_risk_type", evidence.get("risk_type", "")),
+            "evidence_summary": evidence.get("evidence_summary", ""),
         }))
     return rows
 
@@ -128,6 +202,7 @@ def report_builder_node(state: ComplianceState) -> ComplianceState:
     missing_disclaimers = build_missing_disclaimer_rows(updated_state.get("missing_disclaimers", []))
     evidence_rows = build_evidence_rows(updated_state.get("evidence_list", []))
     review_points = build_review_points(updated_state)
+    report_summary_detail = build_report_summary_detail(updated_state, review_points, evidence_rows)
 
     report = {
         "meta": {
@@ -158,8 +233,10 @@ def report_builder_node(state: ComplianceState) -> ComplianceState:
             "action_required": updated_state.get("action_required", False),
             "compliance_review_required": updated_state.get("compliance_review_required", False),
             "review_required": updated_state.get("review_required", False),
-            "summary": make_report_summary(updated_state),
+            "summary": report_summary_detail["executive_summary"],
+            "summary_detail": report_summary_detail,
         },
+        "report_summary": report_summary_detail,
         "review_points": review_points,
         "detected_risks": detected_risks,
         "missing_disclaimers": missing_disclaimers,

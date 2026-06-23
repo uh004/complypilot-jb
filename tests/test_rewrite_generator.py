@@ -2,8 +2,10 @@ from core import rewrite_generator
 from core.rewrite_generator import (
     build_applied_replacements,
     build_required_disclaimer,
+    build_template_rewrite_plan,
     build_template_rewrite_output,
     rewrite_generator_node,
+    try_generate_llm_rewrite_plan,
 )
 
 
@@ -26,6 +28,19 @@ MISSING_DISCLAIMERS = [
 ]
 
 
+class FakeResponse:
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+
+class FakeModel:
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+    def invoke(self, messages: list[dict]) -> FakeResponse:
+        return FakeResponse(self.content)
+
+
 def test_build_required_disclaimer_deduplicates_recommended_text() -> None:
     disclaimer = build_required_disclaimer([*MISSING_DISCLAIMERS, *MISSING_DISCLAIMERS])
 
@@ -45,6 +60,31 @@ def test_build_template_rewrite_output_matches_structured_contract() -> None:
     assert output["is_valid"] is True
 
 
+def test_build_template_rewrite_plan_matches_structured_contract() -> None:
+    applied = build_applied_replacements(DETECTED_RISKS, {})
+    plan = build_template_rewrite_plan(applied, "Required notice")
+
+    assert plan["method"] == "template_rewrite_plan"
+    assert plan["fallback_used"] is True
+    assert plan["is_valid"] is True
+    assert plan["planned_replacements"][0]["keyword"] == applied[0]["keyword"]
+    assert plan["planned_replacements"][0]["required_condition"] == "Required notice"
+
+
+def test_try_generate_llm_rewrite_plan_falls_back_when_invalid() -> None:
+    applied = build_applied_replacements(DETECTED_RISKS, {})
+    plan = try_generate_llm_rewrite_plan(
+        FakeModel('{"rewrite_strategy": ""}'),
+        {"detected_risks": DETECTED_RISKS},
+        applied,
+        "Required notice",
+    )
+
+    assert plan["method"] == "template_rewrite_plan"
+    assert plan["fallback_used"] is True
+    assert plan["errors"] == ["rewrite_strategy_empty"]
+
+
 def test_rewrite_generator_node_uses_template_fallback_by_default() -> None:
     result = rewrite_generator_node(
         {
@@ -60,6 +100,11 @@ def test_rewrite_generator_node_uses_template_fallback_by_default() -> None:
     assert result["rewrite_detail"]["llm_used"] is False
     assert result["rewrite_detail"]["fallback_used"] is True
     assert result["rewrite_detail"]["schema_errors"] == []
+    assert result["rewrite_detail"]["rewrite_plan"]["method"] == "template_rewrite_plan"
+    assert result["rewrite_detail"]["plan_used"] is False
+    assert result["rewrite_detail"]["plan_method"] == "template_rewrite_plan"
+    assert result["rewrite_detail"]["plan_fallback_used"] is True
+    assert result["rewrite_detail"]["plan_schema_errors"] == []
     assert result["next_action"] == "guardrail_check"
 
 
@@ -86,6 +131,7 @@ def test_rewrite_generator_node_falls_back_when_llm_output_is_invalid(monkeypatc
     assert result["rewrite_detail"]["llm_used"] is False
     assert result["rewrite_detail"]["fallback_used"] is True
     assert result["rewrite_detail"]["schema_errors"] == []
+    assert result["rewrite_detail"]["plan_method"] == "template_rewrite_plan"
 
 
 def test_rewrite_generator_node_uses_valid_llm_structured_output(monkeypatch) -> None:
@@ -101,6 +147,16 @@ def test_rewrite_generator_node_uses_valid_llm_structured_output(monkeypatch) ->
             "fallback_used": False,
             "errors": [],
             "is_valid": True,
+            "rewrite_plan": {
+                "method": "llm_rewrite_plan",
+                "rewrite_strategy": "Plan first",
+                "planned_replacements": [],
+                "disclaimer_strategy": "Add notice",
+                "reasoning_summary": "Planning summary",
+                "fallback_used": False,
+                "errors": [],
+            },
+            "plan_used": True,
         },
     )
 
@@ -111,3 +167,7 @@ def test_rewrite_generator_node_uses_valid_llm_structured_output(monkeypatch) ->
     assert result["rewrite_detail"]["method"] == "llm_structured_output"
     assert result["rewrite_detail"]["llm_used"] is True
     assert result["rewrite_detail"]["fallback_used"] is False
+    assert result["rewrite_detail"]["plan_used"] is True
+    assert result["rewrite_detail"]["plan_method"] == "llm_rewrite_plan"
+    assert result["rewrite_detail"]["plan_fallback_used"] is False
+    assert result["rewrite_detail"]["rewrite_plan"]["rewrite_strategy"] == "Plan first"

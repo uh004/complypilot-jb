@@ -162,6 +162,32 @@ def generate_pdf_report(view_model: dict[str, Any], result: dict[str, Any]) -> P
     )
     _write_wrapped(cursor["page"], cursor, _shorten(view_model.get("summary", ""), 220), fontfile=fontfile)
 
+    top_action_items = view_model.get("top_action_items", [])
+    if top_action_items:
+        cursor["y"] += 8
+        _write_line(cursor["page"], cursor, "Top Action Items", size=13, bold=True, fontfile=fontfile)
+        _write_table(
+            cursor,
+            ["Priority", "Action", "Recommendation"],
+            [
+                [
+                    item.get("priority", "Medium"),
+                    item.get("title", ""),
+                    item.get("recommended_action") or item.get("reason", ""),
+                ]
+                for item in top_action_items[:4]
+            ],
+            [70, 190, 250],
+            row_height=38,
+            fontfile=fontfile,
+        )
+
+    evidence_explanation = view_model.get("evidence_explanation", "")
+    if evidence_explanation:
+        cursor["y"] += 4
+        _write_line(cursor["page"], cursor, "Evidence Explanation", size=12, bold=True, fontfile=fontfile)
+        _write_wrapped(cursor["page"], cursor, _shorten(evidence_explanation, 220), size=9, fontfile=fontfile)
+
     cursor["y"] += 8
     _write_line(cursor["page"], cursor, "3. 주요 검토 항목", size=13, bold=True, fontfile=fontfile)
     grouped_points = view_model.get("grouped_review_points", [])

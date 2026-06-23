@@ -31,3 +31,20 @@ def test_build_rewrite_messages_includes_json_only_instruction() -> None:
     assert messages[1]["role"] == "user"
     assert "Return JSON only" in messages[1]["content"]
     assert "illegal" in messages[0]["content"]
+
+
+def test_build_rewrite_prompt_context_includes_rewrite_plan_when_provided() -> None:
+    rewrite_plan = {
+        "rewrite_strategy": "Clarify benefit conditions.",
+        "planned_replacements": [],
+        "disclaimer_strategy": "Add notice near claim.",
+    }
+
+    context = build_rewrite_prompt_context(
+        {"extracted_text": "copy"},
+        applied_replacements=[],
+        required_disclaimer="notice",
+        rewrite_plan=rewrite_plan,
+    )
+
+    assert context["rewrite_plan"] == rewrite_plan

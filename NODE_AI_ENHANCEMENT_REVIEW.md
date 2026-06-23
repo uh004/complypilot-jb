@@ -61,6 +61,37 @@ file_intake
 -> save_result
 ```
 
+## Implementation Status
+
+As of the current POC2 AI enhancement pass, the graph order is still unchanged and the recommended AI-assisted zones have been implemented as optional chains with deterministic fallback.
+
+Implemented:
+
+- `text_extractor`: optional text repair chain using `core/prompts/text_repair_prompt.py` and `core/schemas/text_repair_schema.py`.
+- `content_detector`: optional enum-only ambiguity resolver using `core/prompts/content_detection_prompt.py` and `core/schemas/content_detection_schema.py`.
+- `evidence_retriever`: optional query rewrite and evidence rerank/summary using `core/prompts/query_rewrite_prompt.py`, `core/prompts/evidence_rerank_prompt.py`, and `core/schemas/retrieval_schema.py`.
+- `rewrite_generator`: two-stage plan/draft structure using `core/prompts/rewrite_plan_prompt.py` and `core/schemas/rewrite_plan_schema.py`, while preserving template fallback.
+- `report_output`: optional report summary polish using `core/prompts/report_prompt.py` and `core/schemas/report_schema.py`.
+- Streamlit: sidebar toggles for optional AI features, all defaulting to off.
+- Debug summary: compact AI feature status without raw state or local paths.
+
+Still deterministic:
+
+- `file_intake`
+- `criteria_mapper`
+- `risk_detector`
+- `risk_judge`
+- `guardrail_checker`
+- `router`
+- `save_result`
+
+Current validation:
+
+```text
+python -m pytest
+107 passed
+```
+
 ## Current Reality Check
 
 The attached node-chain note is directionally useful, but the actual code is slightly different:
