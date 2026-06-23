@@ -94,3 +94,36 @@ def test_pdf_report_handles_wrapped_text_across_pages(tmp_path, monkeypatch) -> 
 
     assert pdf_path.exists()
     assert pdf_path.read_bytes().startswith(b"%PDF")
+
+
+def test_pdf_report_first_page_contains_summary_tables(tmp_path, monkeypatch) -> None:
+    import fitz
+
+    monkeypatch.setattr("core.report.pdf_report.REPORTS_DIR", tmp_path)
+
+    result = {
+        "risk_level": "High",
+        "guardrail_status": "ok",
+        "action_required": True,
+        "compliance_review_required": True,
+        "detected_risks": [
+            {
+                "keyword": "maximum benefit",
+                "risk_type": "benefit_scope_misleading",
+                "base_level": "High",
+                "reason": "Benefit scope needs review.",
+                "matched_sentence": "Anyone can get maximum benefit.",
+            }
+        ],
+        "missing_disclaimers": [],
+        "evidence_list": [],
+    }
+    view_model = build_user_view_model(result)
+
+    pdf_path = generate_pdf_report(view_model, result)
+    with fitz.open(pdf_path) as doc:
+        first_page_text = doc[0].get_text()
+
+    assert "종합 결과" in first_page_text
+    assert "주요 검토 항목" in first_page_text
+    assert "탐지 키워드" in first_page_text

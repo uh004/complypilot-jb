@@ -153,7 +153,7 @@
       "channels": ["document", "sns_cardnews", "app_banner", "homepage"],
       "risk_type": "benefit_condition_missing",
       "risk_type_ko": "혜택 조건 누락",
-      "base_level": "Medium",
+      "base_level": "High",
       "patterns": [
         "무조건 할인",
         "최대 할인",
@@ -174,6 +174,89 @@
       ],
       "evidence_query": "카드 광고 혜택 조건 전월 실적 제외 대상 고지",
       "rewrite_hint": "카드 혜택은 전월 실적, 이용 조건, 제외 대상에 따라 달라질 수 있음을 안내해야 합니다.",
+      "enabled": true
+    },
+    {
+      "rule_id": "CARD_MAX_BENEFIT_001",
+      "product_types": ["card"],
+      "channels": ["document", "sns_cardnews", "app_banner", "homepage"],
+      "risk_type": "benefit_scope_misleading",
+      "risk_type_ko": "최대 혜택 범위 오인 가능성",
+      "base_level": "High",
+      "patterns": [
+        "누구나 최대 혜택",
+        "최대 혜택",
+        "높은 할인 혜택",
+        "자동으로 혜택"
+      ],
+      "normalized_patterns": [
+        "누구나최대혜택",
+        "최대혜택",
+        "높은할인혜택",
+        "자동으로혜택"
+      ],
+      "reason": "최대 혜택이나 자동 혜택 표현은 적용 대상, 이용 조건, 한도와 함께 안내되지 않으면 소비자 오인 가능성이 있습니다.",
+      "required_disclaimer_ids": [
+        "CARD_DISC_BENEFIT_001"
+      ],
+      "evidence_query": "카드 광고 최대 혜택 적용 대상 조건 한도 고지",
+      "rewrite_hint": "최대 혜택은 적용 대상, 이용 조건, 월간 한도와 제외 대상에 따라 달라질 수 있음을 함께 안내해야 합니다.",
+      "enabled": true
+    },
+    {
+      "rule_id": "CARD_UNLIMITED_MERCHANT_001",
+      "product_types": ["card"],
+      "channels": ["document", "sns_cardnews", "app_banner", "homepage"],
+      "risk_type": "benefit_scope_misleading",
+      "risk_type_ko": "혜택 적용 범위 오인 가능성",
+      "base_level": "High",
+      "patterns": [
+        "모든 가맹점에서 제한 없이",
+        "제한 없이 할인",
+        "월 할인 한도 제한 없음",
+        "할인 한도 제한 없음",
+        "부담 없이 사용"
+      ],
+      "normalized_patterns": [
+        "모든가맹점에서제한없이",
+        "제한없이할인",
+        "월할인한도제한없음",
+        "할인한도제한없음",
+        "부담없이사용"
+      ],
+      "reason": "모든 가맹점, 제한 없음, 한도 제한 없음 표현은 실제 적용 범위와 예외 조건이 함께 안내되지 않으면 소비자 오인 가능성이 있습니다.",
+      "required_disclaimer_ids": [
+        "CARD_DISC_BENEFIT_001"
+      ],
+      "evidence_query": "카드 광고 모든 가맹점 제한 없음 할인 한도 예외 조건 고지",
+      "rewrite_hint": "혜택 적용 가맹점, 월간 할인 한도, 제외 업종 및 예외 조건을 함께 안내해야 합니다.",
+      "enabled": true
+    },
+    {
+      "rule_id": "CARD_ISSUANCE_EASE_001",
+      "product_types": ["card"],
+      "channels": ["document", "sns_cardnews", "app_banner", "homepage"],
+      "risk_type": "issuance_condition_missing",
+      "risk_type_ko": "발급 조건 누락 가능성",
+      "base_level": "Low",
+      "patterns": [
+        "빠르게 발급 가능",
+        "간편하게 신청",
+        "발급 즉시",
+        "발급 가능 여부를 확인"
+      ],
+      "normalized_patterns": [
+        "빠르게발급가능",
+        "간편하게신청",
+        "발급즉시",
+        "발급가능여부를확인"
+      ],
+      "reason": "카드 발급 편의 표현은 심사 기준, 이용한도, 발급 제한 조건과 함께 안내될 필요가 있습니다.",
+      "required_disclaimer_ids": [
+        "CARD_DISC_BENEFIT_001"
+      ],
+      "evidence_query": "카드 광고 발급 심사 기준 이용한도 조건 고지",
+      "rewrite_hint": "카드 발급 여부와 이용한도는 카드사 심사 기준에 따라 달라질 수 있음을 함께 안내해야 합니다.",
       "enabled": true
     }
   ]

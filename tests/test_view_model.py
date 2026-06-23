@@ -105,3 +105,80 @@ def test_view_model_sanitizes_evidence_paths_and_legal_wording() -> None:
     assert view_model["evidence"][0]["doc_title"] == "rule.txt"
     assert "불법입니다" not in view_model["evidence"][0]["snippet"]
     assert "illegal" not in view_model["problem_cards"][0]["why"].lower()
+
+
+def test_view_model_groups_review_points_by_risk_type_and_separates_missing_disclaimers() -> None:
+    result = {
+        "risk_level": "High",
+        "action_required": True,
+        "compliance_review_required": True,
+        "detected_risks": [
+            {
+                "keyword": "maximum benefit",
+                "keywords": ["maximum benefit"],
+                "risk_type": "benefit_scope_misleading",
+                "base_level": "High",
+                "reason": "Benefit scope needs review.",
+                "matched_sentence": "Anyone can get maximum benefit.",
+                "matched_sentences": ["Anyone can get maximum benefit."],
+                "match_count": 1,
+                "rule_id": "CARD_MAX",
+                "rewrite_hint": "Show conditions and limits together.",
+            },
+            {
+                "keyword": "unlimited",
+                "keywords": ["unlimited"],
+                "risk_type": "benefit_scope_misleading",
+                "base_level": "High",
+                "reason": "Benefit scope needs review.",
+                "matched_sentence": "Use unlimited discounts.",
+                "matched_sentences": ["Use unlimited discounts."],
+                "match_count": 1,
+                "rule_id": "CARD_UNLIMITED",
+                "rewrite_hint": "Show conditions and limits together.",
+            },
+        ],
+        "missing_disclaimers": [
+            {
+                "disclaimer": "annual fee",
+                "base_level": "Medium",
+                "reason": "Annual fee disclosure needs review.",
+                "checked_keywords": ["annual fee"],
+                "recommended_text": "Show annual fee conditions.",
+            }
+        ],
+    }
+
+    view_model = build_user_view_model(result)
+
+    assert len(view_model["grouped_review_points"]) == 1
+    point = view_model["grouped_review_points"][0]
+    assert point["risk_type"] == "benefit_scope_misleading"
+    assert point["match_count"] == 2
+    assert point["detected_keywords"] == ["maximum benefit", "unlimited"]
+    assert point["matched_sentences"] == ["Anyone can get maximum benefit.", "Use unlimited discounts."]
+    assert len(view_model["missing_disclaimers"]) == 1
+    assert all(card["problem_expression"] != "annual fee" for card in view_model["problem_cards"])
+
+
+def test_view_model_adds_evidence_summary_and_linked_risk_type() -> None:
+    view_model = build_user_view_model(
+        {
+            "risk_level": "Medium",
+            "detected_risks": [],
+            "missing_disclaimers": [],
+            "evidence_list": [
+                {
+                    "doc_title": "guide.pdf",
+                    "page": 3,
+                    "risk_type": "benefit_scope_misleading",
+                    "score": 0.71,
+                    "snippet": "Benefits should be presented with conditions and limits.",
+                }
+            ],
+        }
+    )
+
+    evidence = view_model["evidence"][0]
+    assert evidence["linked_risk_type"] == "benefit_scope_misleading"
+    assert "Benefits should be presented" in evidence["evidence_summary"]

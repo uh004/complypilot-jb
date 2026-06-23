@@ -54,3 +54,31 @@ def test_saved_report_hides_internal_evidence_paths(tmp_path, monkeypatch) -> No
     assert "C:/Users" not in evidence_text
     assert "source_path" not in view_model_text
     assert "C:/Users" not in view_model_text
+
+
+def test_high_card_pdf_extracts_multiple_review_points(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("core.report.save_report.REPORTS_DIR", tmp_path)
+    monkeypatch.setattr("core.report.pdf_report.REPORTS_DIR", tmp_path)
+
+    result = build_compliance_graph().invoke(
+        {
+            "file_path": "data/samples/high_card_01.pdf",
+            "retry_count": 0,
+            "max_retry": 2,
+        },
+        config={"recursion_limit": 80},
+    )
+    view_model = result["report"]["view_model"]
+
+    assert result["workflow_status"] == "completed"
+    assert result["saved_result"]["status"] == "saved"
+    assert result["risk_level"] == "High"
+    assert result["detected_product_type"] == "card"
+    assert result["extraction_quality"]["page_count"] == 2
+    assert len(result["sentences"]) >= 30
+    assert len(result["detected_risks"]) >= 4
+    assert len(view_model["grouped_review_points"]) >= 3
+    assert len(view_model["problem_cards"]) >= 4
+    assert len(view_model["issue_locations"]) >= 4
+    assert view_model["source_pages"][0]["page"] == 1
+    assert view_model["document"]["sentence_count"] >= 30

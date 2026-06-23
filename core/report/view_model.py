@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+import re
 from typing import Any
 
 from core.report.sanitize import sanitize_report_payload
@@ -30,6 +31,8 @@ RISK_TYPE_LABELS = {
     "misleading_rate": "금리 조건 누락 가능성",
     "fee_condition_missing": "수수료 조건 누락 가능성",
     "benefit_condition_missing": "혜택 조건 누락 가능성",
+    "benefit_scope_misleading": "혜택 적용 범위 오인 가능성",
+    "issuance_condition_missing": "발급 조건 누락 가능성",
     "principal_loss": "원금손실 안내 필요",
     "principal_loss_misleading": "원금손실 안내 필요",
     "missing_disclaimer": "필수 고지 누락 가능성",
@@ -104,6 +107,63 @@ def deduplicate_risks(risks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return list(grouped.values())
 
 
+def _level_rank(level: str | None) -> int:
+    return {"High": 3, "Medium": 2, "Low": 1, "Pass": 0}.get(str(level or ""), 0)
+
+
+def build_grouped_review_points(risks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: OrderedDict[str, dict[str, Any]] = OrderedDict()
+
+    for risk in risks or []:
+        risk_type = str(risk.get("risk_type", "") or "general_review")
+        sentence = str(risk.get("problem_sentence") or _first_sentence(risk))
+        keywords = risk.get("keywords") or [risk.get("keyword", "")]
+        matched_sentences = risk.get("matched_sentences") or ([sentence] if sentence else [])
+
+        if risk_type not in grouped:
+            grouped[risk_type] = {
+                "risk_type": risk_type,
+                "risk_type_label": risk_type_label(risk_type),
+                "base_level": risk.get("base_level", "Medium"),
+                "level_label": level_label(str(risk.get("base_level", "Medium"))),
+                "representative_sentence": sentence,
+                "detected_keywords": [],
+                "matched_sentences": [],
+                "match_count": 0,
+                "why": risk.get("reason", ""),
+                "suggested_action": risk.get("rewrite_hint") or DEFAULT_SUGGESTIONS.get(risk_type, ""),
+                "rule_ids": [],
+            }
+
+        point = grouped[risk_type]
+        if _level_rank(str(risk.get("base_level", ""))) > _level_rank(str(point.get("base_level", ""))):
+            point["base_level"] = risk.get("base_level", "Medium")
+            point["level_label"] = level_label(str(risk.get("base_level", "Medium")))
+        if not point.get("representative_sentence") and sentence:
+            point["representative_sentence"] = sentence
+        if not point.get("why") and risk.get("reason"):
+            point["why"] = risk.get("reason", "")
+        if not point.get("suggested_action") and risk.get("rewrite_hint"):
+            point["suggested_action"] = risk.get("rewrite_hint", "")
+
+        for keyword in keywords:
+            keyword = str(keyword or "").strip()
+            if keyword and keyword not in point["detected_keywords"]:
+                point["detected_keywords"].append(keyword)
+        for matched_sentence in matched_sentences:
+            matched_sentence = str(matched_sentence or "").strip()
+            if matched_sentence and matched_sentence not in point["matched_sentences"]:
+                point["matched_sentences"].append(matched_sentence)
+        rule_id = str(risk.get("rule_id", "")).strip()
+        if rule_id and rule_id not in point["rule_ids"]:
+            point["rule_ids"].append(rule_id)
+        point["match_count"] += int(risk.get("match_count", 1) or 1)
+
+    points = list(grouped.values())
+    points.sort(key=lambda item: _level_rank(str(item.get("base_level", ""))), reverse=True)
+    return sanitize_report_payload(points)
+
+
 def enrich_missing_disclaimers(missing_disclaimers: list[dict[str, Any]]) -> list[dict[str, Any]]:
     enriched = []
     for item in missing_disclaimers or []:
@@ -136,14 +196,71 @@ def deduplicate_evidence(evidence_list: list[dict[str, Any]]) -> list[dict[str, 
                 "page": evidence.get("page"),
                 "risk_type": evidence.get("risk_type", ""),
                 "risk_type_label": risk_type_label(str(evidence.get("risk_type", ""))),
+                "linked_risk_type": evidence.get("risk_type", ""),
                 "keyword": evidence.get("keyword", ""),
                 "score": round(score, 3),
                 "snippet": evidence.get("snippet", ""),
+                "evidence_summary": f"{risk_type_label(str(evidence.get('risk_type', '')))} 관련 근거: {str(evidence.get('snippet', ''))[:120]}",
             })
 
     rows = list(best_by_key.values())
     rows.sort(key=lambda item: item.get("score", 0.0), reverse=True)
     return rows[:5]
+
+
+def _compact_text(value: str) -> str:
+    return re.sub(r"\s+", "", value or "")
+
+
+def _find_page_number(sentence: str, page_texts: list[dict[str, Any]]) -> int | None:
+    compact_sentence = _compact_text(sentence)
+    if not compact_sentence:
+        return None
+
+    for page in page_texts or []:
+        page_number = page.get("page")
+        page_text = str(page.get("text", ""))
+        if compact_sentence in _compact_text(page_text):
+            return int(page_number) + 1 if isinstance(page_number, int) else page_number
+    return None
+
+
+def build_source_pages(page_texts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "page": int(item.get("page", 0)) + 1 if isinstance(item.get("page"), int) else item.get("page"),
+            "text": item.get("text", ""),
+        }
+        for item in page_texts or []
+        if item.get("text")
+    ]
+
+
+def build_issue_locations(risks: list[dict[str, Any]], page_texts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    locations = []
+    seen: set[tuple[Any, str, str]] = set()
+
+    for risk in risks:
+        sentences = risk.get("matched_sentences") or [risk.get("problem_sentence", "")]
+        for sentence in sentences:
+            sentence = str(sentence or "").strip()
+            if not sentence:
+                continue
+            page_number = _find_page_number(sentence, page_texts)
+            key = (page_number, sentence, risk.get("problem_expression", ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            locations.append(sanitize_report_payload({
+                "page": page_number or "-",
+                "risk_type_label": risk.get("risk_type_label", ""),
+                "level_label": risk.get("level_label", ""),
+                "problem_expression": risk.get("problem_expression", ""),
+                "excerpt": sentence,
+                "suggested_sentence": risk.get("rewrite_hint") or risk.get("suggested_sentence", ""),
+            }))
+
+    return locations[:12]
 
 
 def build_sentence_rewrite_suggestions(risks: list[dict[str, Any]], missing: list[dict[str, Any]]) -> list[dict[str, str]]:
@@ -154,17 +271,13 @@ def build_sentence_rewrite_suggestions(risks: list[dict[str, Any]], missing: lis
         suggestion = risk.get("rewrite_hint") or DEFAULT_SUGGESTIONS.get(risk_type) or "조건과 적용 범위를 함께 표시해 주세요."
         suggestions.append(sanitize_report_payload({
             "problem_sentence": risk.get("problem_sentence", ""),
+            "matched_sentences": risk.get("matched_sentences", []),
+            "match_count": risk.get("match_count", 1),
+            "level_label": risk.get("level_label", ""),
+            "risk_type_label": risk.get("risk_type_label", ""),
             "problem_expression": risk.get("problem_expression", ""),
             "why": risk.get("reason", ""),
             "suggested_sentence": suggestion,
-        }))
-
-    for item in missing:
-        suggestions.append(sanitize_report_payload({
-            "problem_sentence": "추출 문구에서 관련 고지 확인 필요",
-            "problem_expression": item.get("disclaimer", ""),
-            "why": item.get("why", ""),
-            "suggested_sentence": item.get("suggestion", ""),
         }))
 
     return suggestions
@@ -213,15 +326,22 @@ def build_user_view_model(result: dict[str, Any]) -> dict[str, Any]:
     raw_risks = result.get("detected_risks") or report.get("detected_risks", [])
     raw_missing = result.get("missing_disclaimers") or report.get("missing_disclaimers", [])
     raw_evidence = result.get("evidence_list") or report.get("evidence", [])
+    raw_page_texts = result.get("page_texts", [])
 
     risks = deduplicate_risks(raw_risks)
     missing = enrich_missing_disclaimers(raw_missing)
     evidence = deduplicate_evidence(raw_evidence)
+    grouped_review_points = build_grouped_review_points(risks)
     pass_case = is_pass_case(result)
     suggestions = build_sentence_rewrite_suggestions(risks, missing)
+    source_pages = build_source_pages(raw_page_texts)
+    issue_locations = build_issue_locations(risks, raw_page_texts)
 
     risk_level = result.get("risk_level") or report.get("judgment", {}).get("risk_level", "Pass")
     guardrail_status = result.get("guardrail_status") or report.get("guardrail", {}).get("guardrail_status", "ok")
+    extraction_quality = result.get("extraction_quality") or report.get("input", {}).get("extraction_quality", {})
+    page_texts = result.get("page_texts", [])
+    sentences = result.get("sentences", [])
 
     return sanitize_report_payload({
         "is_pass": pass_case,
@@ -230,15 +350,23 @@ def build_user_view_model(result: dict[str, Any]) -> dict[str, Any]:
         "action_required_label": "필요" if result.get("action_required") else "없음",
         "compliance_review_label": "필요" if result.get("compliance_review_required") else "없음",
         "guardrail_label": status_label(guardrail_status),
-        "summary": build_review_summary(result, risks, missing, pass_case),
+        "summary": build_review_summary(result, grouped_review_points, missing, pass_case),
         "document": {
             "file_name": result.get("file_name") or report.get("input", {}).get("file_name", ""),
             "file_type": result.get("file_type") or report.get("input", {}).get("file_type", ""),
             "product_type": result.get("confirmed_product_type") or report.get("content", {}).get("product_type", ""),
             "channel": result.get("confirmed_channel") or report.get("content", {}).get("channel", ""),
             "language": result.get("confirmed_language") or report.get("content", {}).get("language", ""),
+            "extraction_method": result.get("extraction_method") or report.get("input", {}).get("extraction_method", ""),
+            "extraction_confidence": result.get("extraction_confidence") or report.get("input", {}).get("extraction_confidence", 0.0),
+            "page_count": extraction_quality.get("page_count") or len(page_texts),
+            "sentence_count": len(sentences),
+            "text_length": len(result.get("extracted_text") or report.get("content", {}).get("extracted_text_preview", "")),
         },
         "problem_cards": suggestions,
+        "grouped_review_points": grouped_review_points,
+        "issue_locations": issue_locations,
+        "source_pages": source_pages,
         "risks": risks,
         "missing_disclaimers": missing,
         "evidence": evidence,
