@@ -1,34 +1,103 @@
-from core import text_extractor
-from core.text_extractor import should_try_text_repair, text_extractor_node
+from __future__ import annotations
+
+from core.text_extractor import text_extractor_node
+
+
+class UploadedFileStub:
+    def __init__(self, payload: bytes) -> None:
+        self._payload = payload
+
+    def getvalue(self) -> bytes:
+        return self._payload
 
 
 def test_text_extractor_node_normalizes_direct_text_and_adds_segments() -> None:
-    state = {"extracted_text": "첫 문장입니다.  둘째 문장입니다. " * 20}
+    state = {"extracted_text": "First sentence.   Second sentence. " * 20}
 
     result = text_extractor_node(state)
 
     assert result["extraction_method"] == "direct-text"
-    assert result["raw_text"].startswith("첫 문장입니다.")
+    assert result["raw_text"].startswith("First sentence.")
     assert result["ocr_text"] == ""
     assert result["extraction_confidence"] >= 0.5
     assert result["extraction_quality"]["method"] == "direct-text"
-    assert result["sentences"][0] == "첫 문장입니다."
+    assert result["sentences"][0] == "First sentence."
     assert result["page_texts"] == []
     assert result["paragraphs"] == []
     assert result["source_segments"][0]["segment_type"] == "text"
-    assert result["text_repair_detail"]["fallback_used"] is True
+    assert result["source_segments"][0]["extraction_method"] == "direct-text"
+    assert "text_repair" not in result["extraction_quality"]
+    assert "text_repair_detail" not in result
     assert result["guardrail_status"] == "ok"
 
 
 def test_text_extractor_node_extracts_txt_bytes() -> None:
-    state = {"uploaded_file": "안내 문장입니다. " .encode("utf-8") * 40, "file_type": "txt"}
+    state = {"uploaded_file": UploadedFileStub(("guide sentence. " * 40).encode("utf-8")), "file_type": "txt"}
 
     result = text_extractor_node(state)
 
     assert result["extraction_method"] == "plain-text"
     assert result["extraction_quality"]["encoding"] == "utf-8"
-    assert "안내 문장입니다." in result["extracted_text"]
+    assert "guide sentence." in result["extracted_text"]
     assert result["source_segments"][0]["extraction_method"] == "plain-text"
+
+
+def test_text_extractor_node_extracts_pdf_bytes(monkeypatch) -> None:
+    def fake_extract_pdf_pages(file_bytes: bytes) -> tuple[list[dict], dict]:
+        assert file_bytes == b"%PDF"
+        return (
+            [
+                {"page": 0, "text": "Page one sentence."},
+                {"page": 1, "text": "Page two sentence."},
+            ],
+            {"low_quality": False, "page_count": 2, "char_count": 36, "error": ""},
+        )
+
+    monkeypatch.setattr("core.text_extractor.extract_pdf_pages", fake_extract_pdf_pages)
+
+    result = text_extractor_node({"uploaded_file": UploadedFileStub(b"%PDF"), "file_type": "pdf"})
+
+    assert result["extraction_method"] == "pymupdf"
+    assert result["page_texts"][0]["page"] == 0
+    assert result["source_segments"][0]["segment_type"] == "page"
+    assert result["source_segments"][0]["extraction_method"] == "pymupdf"
+
+
+def test_text_extractor_node_extracts_docx_bytes(monkeypatch) -> None:
+    def fake_extract_docx_paragraphs(file_bytes: bytes) -> tuple[list[str], dict]:
+        assert file_bytes == b"DOCX"
+        return (
+            ["Paragraph one.", "Paragraph two."],
+            {"low_quality": False, "paragraph_count": 2, "char_count": 28, "error": ""},
+        )
+
+    monkeypatch.setattr("core.text_extractor.extract_docx_paragraphs", fake_extract_docx_paragraphs)
+
+    result = text_extractor_node({"uploaded_file": UploadedFileStub(b"DOCX"), "file_type": "docx"})
+
+    assert result["extraction_method"] == "python-docx"
+    assert result["paragraphs"] == ["Paragraph one.", "Paragraph two."]
+    assert result["source_segments"][0]["segment_type"] == "paragraph"
+    assert result["source_segments"][0]["extraction_method"] == "python-docx"
+
+
+def test_text_extractor_node_extracts_image_bytes(monkeypatch) -> None:
+    def fake_extract_image_text(file_bytes: bytes) -> tuple[str, float, dict]:
+        assert file_bytes == b"IMG"
+        return (
+            "OCR sentence one.\nOCR sentence two.",
+            0.91,
+            {"low_quality": False, "char_count": 34, "ocr_engine": "naver", "field_count": 2, "error": ""},
+        )
+
+    monkeypatch.setattr("core.text_extractor.extract_image_text", fake_extract_image_text)
+
+    result = text_extractor_node({"uploaded_file": UploadedFileStub(b"IMG"), "file_type": "image"})
+
+    assert result["extraction_method"] == "naver-ocr"
+    assert result["ocr_text"] == "OCR sentence one.\nOCR sentence two."
+    assert result["source_segments"][0]["segment_type"] == "text"
+    assert result["source_segments"][0]["extraction_method"] == "naver-ocr"
 
 
 def test_text_extractor_node_marks_missing_input_for_review() -> None:
@@ -42,40 +111,8 @@ def test_text_extractor_node_marks_missing_input_for_review() -> None:
 
 
 def test_text_extractor_node_marks_low_quality_short_text_for_review() -> None:
-    result = text_extractor_node({"extracted_text": "짧음"})
+    result = text_extractor_node({"extracted_text": "Hi"})
 
     assert result["extraction_confidence"] < 0.5
     assert result["guardrail_status"] == "extraction_check_required"
     assert result["review_required"] is True
-
-
-def test_should_try_text_repair_only_for_low_quality_text() -> None:
-    assert should_try_text_repair("normal text " * 20, 0.9, {"low_quality": False, "broken_char_ratio": 0.0}) is False
-    assert should_try_text_repair("broken text " * 20, 0.4, {"low_quality": True, "broken_char_ratio": 0.1}) is True
-    assert should_try_text_repair("", 0.1, {"low_quality": True}) is False
-
-
-def test_text_extractor_node_uses_repaired_text_when_available(monkeypatch) -> None:
-    def fake_repair(state: dict, extracted_text: str, extraction_confidence: float, extraction_quality: dict) -> dict:
-        return {
-            "text": "Repaired sentence one. Repaired sentence two.",
-            "detail": {
-                "method": "llm_text_repair",
-                "llm_used": True,
-                "fallback_used": False,
-                "changed": True,
-                "repair_summary": "Joined fragmented text.",
-                "original_confidence": extraction_confidence,
-                "repaired_confidence": 0.9,
-                "errors": [],
-            },
-        }
-
-    monkeypatch.setattr(text_extractor, "try_repair_extracted_text", fake_repair)
-
-    result = text_extractor_node({"extracted_text": "fragment one\nfragment two", "enable_llm_text_repair": True})
-
-    assert result["extracted_text"] == "Repaired sentence one. Repaired sentence two."
-    assert result["text_repair_detail"]["method"] == "llm_text_repair"
-    assert result["extraction_quality"]["text_repair"]["changed"] is True
-    assert result["source_segments"][0]["extraction_method"] == "direct-text-repaired"

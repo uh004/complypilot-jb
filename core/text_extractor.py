@@ -7,9 +7,6 @@ import os
 import time
 
 from core.file_intake import resolve_project_path
-from core.paths import has_openai_key
-from core.prompts.text_repair_prompt import build_text_repair_context, build_text_repair_messages
-from core.schemas.text_repair_schema import validate_text_repair_output
 from core.state import ComplianceState
 from core.tools.parsing_tools import (
     build_source_segments,
@@ -19,9 +16,6 @@ from core.tools.parsing_tools import (
     normalize_extracted_text,
     split_sentences,
 )
-
-
-TEXT_REPAIR_CONFIDENCE_THRESHOLD = 0.65
 
 
 def get_file_bytes_from_state(state: ComplianceState) -> bytes:
@@ -106,79 +100,6 @@ def extract_image_text(file_bytes: bytes) -> tuple[str, float, dict]:
         return "", 0.0, {"low_quality": True, "char_count": 0, "ocr_engine": "naver", "error": f"OCR extraction failed: {exc}"}
 
 
-def should_try_text_repair(extracted_text: str, extraction_confidence: float, extraction_quality: dict) -> bool:
-    if not extracted_text.strip():
-        return False
-    return (
-        extraction_confidence < TEXT_REPAIR_CONFIDENCE_THRESHOLD
-        or bool(extraction_quality.get("low_quality"))
-        or float(extraction_quality.get("broken_char_ratio", 0.0) or 0.0) > 0.03
-    )
-
-
-def build_text_repair_fallback_detail(reason: str = "") -> dict:
-    errors = [reason] if reason else []
-    return {
-        "method": "deterministic_text",
-        "llm_used": False,
-        "fallback_used": True,
-        "changed": False,
-        "repair_summary": "",
-        "errors": errors,
-    }
-
-
-def try_repair_extracted_text(
-    state: ComplianceState,
-    extracted_text: str,
-    extraction_confidence: float,
-    extraction_quality: dict,
-) -> dict:
-    if not state.get("enable_llm_text_repair", False) or not has_openai_key() or not should_try_text_repair(extracted_text, extraction_confidence, extraction_quality):
-        return {"text": extracted_text, "detail": build_text_repair_fallback_detail()}
-
-    try:
-        from langchain_openai import ChatOpenAI
-
-        context = build_text_repair_context(state, extracted_text, extraction_quality)
-        messages = build_text_repair_messages(context)
-        model = ChatOpenAI(model=str(state.get("text_repair_model", "gpt-4o-mini")), temperature=0)
-        response = model.invoke(messages)
-        parsed = validate_text_repair_output(
-            getattr(response, "content", ""),
-            original_text=extracted_text,
-            llm_used=True,
-            fallback_used=False,
-        )
-        if not parsed["is_valid"]:
-            raise ValueError(",".join(parsed["errors"]))
-
-        repaired_text = normalize_extracted_text(parsed["repaired_text"])
-        repaired_confidence, repaired_quality = calculate_extraction_confidence(
-            repaired_text,
-            {**extraction_quality, "repair_candidate": True},
-        )
-        if repaired_confidence < extraction_confidence:
-            raise ValueError("repaired_confidence_lower_than_original")
-
-        return {
-            "text": repaired_text,
-            "detail": {
-                "method": "llm_text_repair",
-                "llm_used": True,
-                "fallback_used": False,
-                "changed": parsed["changed"],
-                "repair_summary": parsed["repair_summary"],
-                "original_confidence": extraction_confidence,
-                "repaired_confidence": repaired_confidence,
-                "repaired_quality": repaired_quality,
-                "errors": [],
-            },
-        }
-    except Exception as exc:
-        return {"text": extracted_text, "detail": build_text_repair_fallback_detail(str(exc))}
-
-
 def text_extractor_node(state: ComplianceState) -> ComplianceState:
     updated_state = dict(state)
     file_type = updated_state.get("file_type")
@@ -238,20 +159,12 @@ def text_extractor_node(state: ComplianceState) -> ComplianceState:
         extracted_text,
         {**extraction_quality, "parser_confidence": extraction_confidence, "method": extraction_method},
     )
-    repair_result = try_repair_extracted_text(updated_state, extracted_text, extraction_confidence, extraction_quality)
-    extracted_text = repair_result["text"]
-    if repair_result["detail"].get("llm_used"):
-        extraction_confidence, extraction_quality = calculate_extraction_confidence(
-            extracted_text,
-            {**extraction_quality, "parser_confidence": extraction_confidence, "method": extraction_method, "text_repaired": True},
-        )
-    extraction_quality["text_repair"] = repair_result["detail"]
     sentences = split_sentences(extracted_text)
     source_segments = build_source_segments(
         text=extracted_text,
-        method=f"{extraction_method}-repaired" if repair_result["detail"].get("llm_used") else extraction_method,
-        page_texts=[] if repair_result["detail"].get("llm_used") else page_texts,
-        paragraphs=[] if repair_result["detail"].get("llm_used") else paragraphs,
+        method=extraction_method,
+        page_texts=page_texts,
+        paragraphs=paragraphs,
     )
 
     updated_state.update({
@@ -261,7 +174,6 @@ def text_extractor_node(state: ComplianceState) -> ComplianceState:
         "extraction_method": extraction_method,
         "extraction_confidence": extraction_confidence,
         "extraction_quality": extraction_quality,
-        "text_repair_detail": repair_result["detail"],
         "page_texts": page_texts,
         "paragraphs": paragraphs,
         "sentences": sentences,
@@ -273,7 +185,7 @@ def text_extractor_node(state: ComplianceState) -> ComplianceState:
         updated_state["action_required"] = True
         updated_state["compliance_review_required"] = True
         updated_state["review_required"] = True
-        updated_state["risk_reason"] = "추출 텍스트가 없거나 추출 신뢰도가 낮아 원문 확인이 필요합니다."
+        updated_state["risk_reason"] = "추출 텍스트가 없거나 추출 신뢰도가 낮아 확인이 필요합니다."
     else:
         updated_state["guardrail_status"] = updated_state.get("guardrail_status", "ok")
         updated_state["review_required"] = bool(updated_state.get("action_required", False) or updated_state.get("compliance_review_required", False))
