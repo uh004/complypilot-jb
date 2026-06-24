@@ -56,11 +56,17 @@ class ComplianceState(TypedDict):
     disclaimer_check_summary: NotRequired[dict[str, Any]]
 
     # Evidence retrieval
+    retrieval_queries: NotRequired[list[dict[str, Any]]]
+    retrieved_evidences: NotRequired[list[dict[str, Any]]]
+    evidence_context: NotRequired[str]
     evidence_queries: NotRequired[list[dict[str, Any]]]
     evidence_list: NotRequired[list[dict[str, Any]]]
     evidence_score: NotRequired[float]
     evidence_quality: NotRequired[str]
     evidence_summary: NotRequired[dict[str, Any]]
+    retrieval_debug: NotRequired[list[dict[str, Any]]]
+    evidence_query_rewrite_detail: NotRequired[dict[str, Any]]
+    evidence_rerank_detail: NotRequired[dict[str, Any]]
 
     # Judgment
     risk_level: NotRequired[str]

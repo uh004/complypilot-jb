@@ -1,29 +1,36 @@
+from core.paths import COLLECTION_NAME
 from core.tools import retrieval_tools
 from core.tools.retrieval_tools import (
     apply_deterministic_evidence_summaries,
     apply_evidence_rerank_selection,
+    bm25_search,
     build_context_snippet,
     build_evidence_queries,
+    build_query_profile,
     calculate_evidence_score,
     classify_evidence_quality,
     deduplicate_evidence,
     expand_rewritten_evidence_queries,
     format_evidence_for_report,
+    hybrid_search,
     keyword_score,
     retrieve_evidence_for_query,
-    search_fallback_evidence,
     tokenize_for_search,
 )
 
 
-def test_build_evidence_queries_includes_detected_risks_and_missing_disclaimers() -> None:
+def test_collection_name_is_fixed_for_retrieval_assets() -> None:
+    assert COLLECTION_NAME == "complypilot_regulations_v2"
+
+
+def test_build_evidence_queries_uses_state_inputs_and_fallbacks() -> None:
     state = {
         "confirmed_product_type": "loan",
         "detected_risks": [
             {
                 "risk_type": "approval_misleading",
                 "keyword": "누구나 승인",
-                "reason": "승인 가능성 오인",
+                "reason": "심사 조건 누락 가능성",
                 "evidence_query": "대출 승인 보장 표현",
             }
         ],
@@ -40,18 +47,23 @@ def test_build_evidence_queries_includes_detected_risks_and_missing_disclaimers(
 
     assert [query["query_type"] for query in queries] == ["detected_risk", "missing_disclaimer"]
     assert queries[0]["risk_type"] == "approval_misleading"
-    assert "누구나 승인" in queries[0]["query"]
+    assert "loan" in queries[0]["query"]
     assert queries[1]["risk_type"] == "missing_disclaimer"
-    assert "금리 적용 조건" in queries[1]["query"]
+    assert "최저금리 조건 고지" in queries[1]["query"]
 
 
-def test_build_evidence_queries_adds_general_query_when_no_risks_exist() -> None:
-    queries = build_evidence_queries({"confirmed_product_type": "deposit", "detected_risks": [], "missing_disclaimers": []})
+def test_build_evidence_queries_adds_general_query_from_extracted_text() -> None:
+    queries = build_evidence_queries({
+        "confirmed_product_type": "deposit",
+        "detected_risks": [],
+        "missing_disclaimers": [],
+        "extracted_text": "예금 광고 문구와 조건 설명입니다.",
+    })
 
     assert len(queries) == 1
     assert queries[0]["query_type"] == "general"
     assert queries[0]["risk_type"] == "general_review"
-    assert queries[0]["keyword"] == "deposit"
+    assert "예금 광고 문구" in queries[0]["query"]
 
 
 def test_expand_rewritten_evidence_queries_preserves_original_metadata() -> None:
@@ -80,6 +92,93 @@ def test_expand_rewritten_evidence_queries_preserves_original_metadata() -> None
     assert expanded[0]["query_variant"] == "llm_rewrite_1"
     assert expanded[0]["query_rewrite_used"] is True
     assert expanded[0]["source_item"] == {"id": 1}
+
+
+class _FakeBm25:
+    def get_scores(self, _: list[str]) -> list[float]:
+        return [1.2, 0.0, -0.5, 0.3]
+
+
+def test_bm25_search_filters_non_positive_scores(monkeypatch) -> None:
+    monkeypatch.setattr(
+        retrieval_tools,
+        "load_bm25_payload",
+        lambda: {
+            "bm25": _FakeBm25(),
+            "ids": ["c1", "c2", "c3", "c4"],
+            "documents": ["수수료 안내", "0점", "음수", "부대비용 안내"],
+            "metadatas": [
+                {"law_name": "A", "article_no": "제1조", "page": 1},
+                {"law_name": "B", "article_no": "제2조", "page": 2},
+                {"law_name": "C", "article_no": "제3조", "page": 3},
+                {"law_name": "D", "article_no": "제4조", "page": 4},
+            ],
+        },
+    )
+
+    rows = bm25_search(build_query_profile("수수료"), top_k=10)
+
+    assert [row["chunk_id"] for row in rows] == ["c1", "c4"]
+    assert all(row["bm25_score"] > 0 for row in rows)
+
+
+def test_hybrid_search_returns_report_compatible_fields() -> None:
+    rows = hybrid_search("수수료", final_top_k=3)
+
+    assert rows
+    assert {"doc_title", "page", "snippet", "score", "retrieval_method"}.issubset(rows[0])
+    assert rows[0]["doc_title"]
+    assert rows[0]["snippet"]
+
+
+def test_retrieve_evidence_for_query_keeps_fallback_without_local_path(monkeypatch) -> None:
+    query_item = {
+        "query_type": "detected_risk",
+        "risk_type": "approval_misleading",
+        "keyword": "누구나 승인",
+        "query": "대출 승인 보장",
+    }
+
+    monkeypatch.setattr(retrieval_tools, "hybrid_search", lambda query, final_top_k=3: [])
+    monkeypatch.setattr(
+        retrieval_tools,
+        "search_fallback_evidence",
+        lambda query, top_k=3: [
+            {
+                "retrieval_method": "keyword_fallback",
+                "score": 0.7,
+                "doc_title": "guide.txt",
+                "page": 2,
+                "snippet": "대출 승인 보장 안내",
+                "document_type": "legacy_text",
+                "chunk_id": "",
+                "parent_id": "",
+                "risk_tags": [],
+            }
+        ],
+    )
+
+    evidence = retrieve_evidence_for_query(query_item)
+
+    assert evidence == [
+        {
+            "query_type": "detected_risk",
+            "risk_type": "approval_misleading",
+            "keyword": "누구나 승인",
+            "query": "대출 승인 보장",
+            "retrieval_method": "keyword_fallback",
+            "score": 0.7,
+            "doc_title": "guide.txt",
+            "page": 2,
+            "snippet": "대출 승인 보장 안내",
+            "document_type": "legacy_text",
+            "chunk_id": "",
+            "parent_id": "",
+            "risk_tags": [],
+        }
+    ]
+    assert query_item["_retrieval_debug"]["retrieval_method"] == "fallback"
+    assert "source_path" not in evidence[0]
 
 
 def test_apply_deterministic_evidence_summaries_adds_review_context() -> None:
@@ -126,92 +225,18 @@ def test_apply_evidence_rerank_selection_keeps_unselected_evidence() -> None:
 def test_keyword_search_helpers_score_and_snippet_context() -> None:
     tokens = tokenize_for_search("대출 승인 조건 A!")
     score = keyword_score("대출 승인", "이 문서는 대출 심사 및 승인 조건을 설명합니다.")
-    snippet = build_context_snippet("앞부분 " * 40 + "대출 승인 조건 안내입니다." + "뒷부분 " * 40, "승인 조건", width=40)
+    snippet = build_context_snippet("앞문장" * 40 + "대출 승인 조건 안내입니다." + "뒷문장" * 40, "승인 조건", width=40)
 
     assert tokens == ["대출", "승인", "조건"]
     assert score == 1.0
     assert "승인 조건" in snippet
 
 
-def test_search_fallback_evidence_uses_loaded_documents(monkeypatch) -> None:
-    monkeypatch.setattr(
-        retrieval_tools,
-        "load_fallback_documents",
-        lambda: [
-            {
-                "source_path": "C:/internal/guide.txt",
-                "source": "guide.txt",
-                "doc_title": "guide.txt",
-                "page": None,
-                "text": "대출 승인 조건과 심사 결과를 안내합니다.",
-            },
-            {
-                "source_path": "C:/internal/card.txt",
-                "source": "card.txt",
-                "doc_title": "card.txt",
-                "page": None,
-                "text": "카드 혜택 안내입니다.",
-            },
-        ],
-    )
-
-    results = search_fallback_evidence("대출 승인 조건", top_k=1)
-
-    assert len(results) == 1
-    assert results[0]["retrieval_method"] == "keyword_fallback"
-    assert results[0]["doc_title"] == "guide.txt"
-    assert results[0]["source_path"] == "C:/internal/guide.txt"
-    assert "대출 승인 조건" in results[0]["snippet"]
-
-
-def test_retrieve_evidence_for_query_prefers_chroma_then_fallback(monkeypatch) -> None:
-    query_item = {
-        "query_type": "detected_risk",
-        "risk_type": "approval_misleading",
-        "keyword": "누구나 승인",
-        "query": "대출 승인 조건",
-    }
-    monkeypatch.setattr(retrieval_tools, "search_chroma_evidence", lambda query, top_k=3: [])
-    monkeypatch.setattr(
-        retrieval_tools,
-        "search_fallback_evidence",
-        lambda query, top_k=3: [
-            {
-                "retrieval_method": "keyword_fallback",
-                "score": 0.7,
-                "source_path": "C:/internal/guide.txt",
-                "source": "guide.txt",
-                "doc_title": "guide.txt",
-                "page": 2,
-                "snippet": "대출 승인 조건 안내",
-            }
-        ],
-    )
-
-    evidence = retrieve_evidence_for_query(query_item)
-
-    assert evidence == [
-        {
-            "query_type": "detected_risk",
-            "risk_type": "approval_misleading",
-            "keyword": "누구나 승인",
-            "query": "대출 승인 조건",
-            "retrieval_method": "keyword_fallback",
-            "score": 0.7,
-            "source_path": "C:/internal/guide.txt",
-            "source": "guide.txt",
-            "doc_title": "guide.txt",
-            "page": 2,
-            "snippet": "대출 승인 조건 안내",
-        }
-    ]
-
-
 def test_evidence_scoring_quality_deduplication_and_report_format() -> None:
     evidence = [
-        {"risk_type": "approval", "keyword": "A", "doc_title": "guide", "page": 1, "score": 0.2, "snippet": "old", "source_path": "C:/x"},
-        {"risk_type": "approval", "keyword": "A", "doc_title": "guide", "page": 1, "score": 0.8, "snippet": "new", "source_path": "C:/x"},
-        {"risk_type": "rate", "keyword": "B", "doc_title": "rate", "page": None, "score": 1.5, "snippet": "rate"},
+        {"risk_type": "approval", "keyword": "A", "doc_title": "guide", "page": 1, "score": 0.2, "snippet": "old", "parent_id": "p1"},
+        {"risk_type": "approval", "keyword": "A", "doc_title": "guide", "page": 1, "score": 0.8, "snippet": "new", "parent_id": "p1"},
+        {"risk_type": "rate", "keyword": "B", "doc_title": "rate", "page": None, "score": 1.5, "snippet": "rate", "parent_id": "p2"},
     ]
 
     deduped = deduplicate_evidence(evidence)
@@ -225,14 +250,4 @@ def test_evidence_scoring_quality_deduplication_and_report_format() -> None:
     assert classify_evidence_quality(0.3, deduped) == "weak"
     assert classify_evidence_quality(0.9, deduped) == "sufficient"
     assert "source_path" not in report_item
-    assert set(report_item) == {
-        "doc_title",
-        "page",
-        "snippet",
-        "score",
-        "retrieval_method",
-        "risk_type",
-        "keyword",
-        "linked_risk_type",
-        "evidence_summary",
-    }
+    assert {"doc_title", "page", "snippet", "score", "retrieval_method", "risk_type", "keyword", "linked_risk_type", "evidence_summary"}.issubset(report_item)

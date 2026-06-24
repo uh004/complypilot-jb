@@ -21,6 +21,8 @@ outputs/**
 !outputs/logs/
 !outputs/logs/.gitkeep
 data/chromadb/
+data/retrieval/
+!data/retrieval/.gitkeep
 vector_db/
 vector_db/**
 !vector_db/.gitkeep

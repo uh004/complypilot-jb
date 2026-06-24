@@ -1,9 +1,18 @@
 from core import evidence_retriever
 from core.evidence_retriever import evidence_retriever_node
+from core.risk_judge import risk_judge_node
 
 
-def test_evidence_retriever_node_updates_state_with_sorted_capped_evidence(monkeypatch) -> None:
+def test_evidence_retriever_node_updates_state_with_structured_fields(monkeypatch) -> None:
     def fake_retrieve(query_item: dict, top_k: int = 3) -> list[dict]:
+        query_item["_retrieval_debug"] = {
+            "query": query_item["query"],
+            "query_type": query_item["query_type"],
+            "risk_type": query_item["risk_type"],
+            "result_count": 5,
+            "retrieval_method": "hybrid",
+            "backend_status": {"bm25_loaded": True, "vectorstore_loaded": False},
+        }
         return [
             {
                 "query_type": query_item["query_type"],
@@ -12,11 +21,13 @@ def test_evidence_retriever_node_updates_state_with_sorted_capped_evidence(monke
                 "query": query_item["query"],
                 "retrieval_method": "fake",
                 "score": score,
-                "source_path": f"C:/internal/{score}.txt",
-                "source": f"{score}.txt",
                 "doc_title": f"{score}.txt",
                 "page": None,
                 "snippet": f"근거 {score}",
+                "chunk_id": f"c-{score}",
+                "parent_id": f"p-{score}",
+                "document_type": "law",
+                "risk_tags": ["approval_misleading"],
             }
             for score in [0.1, 0.9, 0.5, 0.7, 0.4]
         ]
@@ -29,13 +40,13 @@ def test_evidence_retriever_node_updates_state_with_sorted_capped_evidence(monke
                 "risk_type": "approval_misleading",
                 "keyword": "누구나 승인",
                 "reason": "승인 가능성 오인",
-                "evidence_query": "대출 승인 조건",
+                "evidence_query": "대출 승인 보장 표현",
             },
             {
                 "risk_type": "rate_condition_missing",
                 "keyword": "최저금리",
                 "reason": "조건 누락",
-                "evidence_query": "대출 금리 조건",
+                "evidence_query": "대출 금리 조건 고지",
             },
         ],
         "missing_disclaimers": [],
@@ -43,15 +54,18 @@ def test_evidence_retriever_node_updates_state_with_sorted_capped_evidence(monke
 
     result = evidence_retriever_node(state)
 
-    assert len(result["evidence_queries"]) == 2
-    assert len(result["evidence_list"]) == 8
-    assert result["evidence_list"][0]["score"] == 0.9
-    assert result["evidence_list"][0]["evidence_summary"]
-    assert result["evidence_list"][0]["linked_risk_type"]
+    assert len(result["retrieval_queries"]) == 2
+    assert len(result["retrieved_evidences"]) == 8
+    assert result["retrieved_evidences"][0]["score"] == 0.9
+    assert result["retrieved_evidences"][0]["evidence_summary"]
+    assert result["retrieved_evidences"][0]["linked_risk_type"]
+    assert result["evidence_context"]
     assert result["evidence_score"] == 0.625
     assert result["evidence_quality"] == "sufficient"
-    assert result["evidence_summary"]["query_count"] == 2
-    assert result["evidence_summary"]["evidence_count"] == 8
+    assert result["evidence_list"] == result["retrieved_evidences"]
+    assert result["evidence_queries"] == result["retrieval_queries"]
+    assert len(result["retrieval_debug"]) == 2
+    assert all("source_path" not in evidence for evidence in result["retrieved_evidences"])
     assert result["evidence_rerank_detail"]["fallback_used"] is True
     assert result["next_action"] == "risk_judgment"
 
@@ -61,8 +75,9 @@ def test_evidence_retriever_node_marks_insufficient_when_no_results(monkeypatch)
 
     result = evidence_retriever_node({"confirmed_product_type": "loan", "detected_risks": [], "missing_disclaimers": []})
 
-    assert result["evidence_queries"][0]["query_type"] == "general"
-    assert result["evidence_list"] == []
+    assert result["retrieval_queries"][0]["query_type"] == "general"
+    assert result["retrieved_evidences"] == []
+    assert result["evidence_context"] == ""
     assert result["evidence_score"] == 0.0
     assert result["evidence_quality"] == "insufficient"
     assert result["evidence_summary"]["evidence_count"] == 0
@@ -87,7 +102,7 @@ def test_evidence_retriever_uses_deterministic_query_fallback_without_llm(monkey
         "missing_disclaimers": [],
     })
 
-    assert result["evidence_queries"][0]["query"] == "original approval condition query approval condition review"
+    assert result["retrieval_queries"][0]["query"] == "original approval condition query loan"
     assert result["evidence_query_rewrite_detail"]["fallback_used"] is True
     assert result["evidence_query_rewrite_detail"]["llm_used"] is False
     assert result["evidence_query_rewrite_detail"]["original_query_count"] == 1
@@ -138,7 +153,7 @@ def test_evidence_retriever_uses_rewritten_queries_when_available(monkeypatch) -
     })
 
     assert captured_queries == ["rewritten regulation query"]
-    assert result["evidence_queries"][0]["query_rewrite_used"] is True
+    assert result["retrieval_queries"][0]["query_rewrite_used"] is True
     assert result["evidence_query_rewrite_detail"]["method"] == "llm_query_rewrite"
     assert result["evidence_query_rewrite_detail"]["llm_used"] is True
 
@@ -153,11 +168,13 @@ def test_evidence_retriever_applies_reranked_evidence_when_available(monkeypatch
                 "query": query_item["query"],
                 "retrieval_method": "fake",
                 "score": 0.3,
-                "source_path": "C:/internal/a.txt",
-                "source": "a.txt",
                 "doc_title": "a.txt",
                 "page": 1,
                 "snippet": "first evidence",
+                "chunk_id": "c1",
+                "parent_id": "p1",
+                "document_type": "law",
+                "risk_tags": [],
             },
             {
                 "query_type": query_item["query_type"],
@@ -166,11 +183,13 @@ def test_evidence_retriever_applies_reranked_evidence_when_available(monkeypatch
                 "query": query_item["query"],
                 "retrieval_method": "fake",
                 "score": 0.7,
-                "source_path": "C:/internal/b.txt",
-                "source": "b.txt",
                 "doc_title": "b.txt",
                 "page": 2,
                 "snippet": "second evidence",
+                "chunk_id": "c2",
+                "parent_id": "p2",
+                "document_type": "law",
+                "risk_tags": [],
             },
         ]
 
@@ -217,7 +236,29 @@ def test_evidence_retriever_applies_reranked_evidence_when_available(monkeypatch
         "missing_disclaimers": [],
     })
 
-    assert result["evidence_list"][0]["risk_type"] == "second"
-    assert result["evidence_list"][0]["evidence_summary"] == "Reranked evidence summary."
+    assert result["retrieved_evidences"][0]["risk_type"] == "second"
+    assert result["retrieved_evidences"][0]["evidence_summary"] == "Reranked evidence summary."
     assert result["evidence_rerank_detail"]["method"] == "llm_evidence_rerank"
     assert result["evidence_rerank_detail"]["llm_used"] is True
+
+
+def test_evidence_retriever_does_not_change_rule_based_risk_level(monkeypatch) -> None:
+    monkeypatch.setattr(evidence_retriever, "retrieve_evidence_for_query", lambda query_item, top_k=3: [])
+
+    state = {
+        "confirmed_product_type": "loan",
+        "detected_risks": [
+            {
+                "risk_type": "approval_misleading",
+                "keyword": "누구나 승인",
+                "base_level": "High",
+                "reason": "오인 가능성",
+                "evidence_query": "대출 승인 보장 표현",
+            }
+        ],
+        "missing_disclaimers": [],
+    }
+
+    judged = risk_judge_node(evidence_retriever_node(state))
+
+    assert judged["risk_level"] == "High"

@@ -1,6 +1,7 @@
 Project
 
 ComplyPilot JB is a Streamlit MVP for financial marketing compliance review.
+This project is a financial advertising compliance review RAG system for the JB Financial Group Fin AI Challenge.
 
 This project is a review-assist system. It must not present itself as making final legal judgments.
 
@@ -36,7 +37,11 @@ app.py: Streamlit UI wrapper
 core/: pure Python workflow nodes
 graph/workflow.py: LangGraph workflow assembly
 data/rules/: JSON rules
-data/regulations/: RAG documents
+data/products/: product input, product condition reference, samples, tests
+data/vectordb/: law, enforcement decree, supervisory regulation, guideline PDF originals for RAG
+data/retrieval/: structured retrieval artifacts such as parents.jsonl, children.jsonl, bm25_index
+data/chromadb/: Chroma vector index artifacts
+data/regulations/: legacy text regulation references used by existing POC paths
 data/eval_cases/: fixed evaluation cases
 outputs/reports/: generated reports
 tests/: pytest tests
@@ -49,6 +54,13 @@ Do not rewrite unrelated files.
 Use pathlib.Path, not absolute paths.
 Return dicts compatible with ComplianceState.
 Prefer improving existing nodes over adding new workflow nodes.
+Do not break the existing Streamlit/report output schema.
+
+For retrieval modernization, move validated logic from these notebooks into operational modules instead of keeping production logic in notebooks:
+
+04_build_vector_bm25_index.ipynb
+05_test_hybrid_retrieval.ipynb
+06_test_evidence_retriever_state.ipynb
 
 Use this separation:
 
@@ -243,3 +255,69 @@ Streamlit output still works if UI is affected.
 Report/UI does not expose local absolute paths.
 Final report does not contain legal assertion wording.
 Changed behavior is covered by tests.
+
+RAG Rebuild Working Rules
+
+For RAG rebuild work, keep the following durable rules:
+
+The purpose of this work is to improve regulation evidence retrieval quality inside evidence_retriever.
+Do not redesign the LangGraph workflow for this work.
+Do not change risk_level judgment logic for this work.
+
+Use this data separation:
+
+data/products/: product input, product condition reference, samples, tests
+data/vectordb/: law, enforcement decree, supervisory regulation, guideline PDF originals for RAG
+data/chromadb/: built vector index artifacts
+data/retrieval/: structured retrieval artifacts such as parents.jsonl, children.jsonl, bm25_index
+
+Build and retrieval rules:
+
+collection_name must be standardized as complypilot_regulations_v2.
+OpenAI embedding model must be standardized as text-embedding-3-small.
+Do not delete or heavily rewrite notebooks as part of normal implementation.
+Treat notebooks as reference and validation assets.
+Operational code should be migrated from validated notebook logic into modules under core/ and tools/.
+Preferred operational build path is a CLI script under tools/.
+When rebuilding Chroma DB, build into a temporary directory first and replace the live directory only after validation succeeds.
+Validation must include collection count > 0 before replacement.
+
+Phase execution rules:
+
+Work in small phases.
+Do not implement multiple phases in one task unless the user explicitly asks for it.
+Before starting the next phase, confirm the current phase exit criteria through tests or smoke checks.
+
+Phase boundaries:
+
+Phase 0: build stabilization only
+Phase 0 is for structured RAG build infrastructure, not for rebuilding a production basic chunking RAG.
+Do not implement regulation_parser.
+Do not implement BM25.
+Do not implement hybrid retrieval.
+
+Phase 1: regulation parser and structured artifacts only
+Do not connect new retrieval flow into evidence_retriever yet.
+
+Phase 2: hybrid retrieval only
+Do not change graph order.
+Do not change report schema in a large way.
+
+Phase 3: evidence_retriever integration only
+Keep visible evidence fields limited to doc_title, page, snippet, score, retrieval_method.
+
+Testing rules for phased RAG work:
+
+Each phase must define:
+Goal
+In Scope
+Out of Scope
+Harness
+Exit Criteria
+
+Each phase should include at least one targeted pytest command before broader smoke tests when possible.
+
+Code style for new RAG work:
+
+New Python code should include type hints.
+New functions should include concise Korean docstrings.

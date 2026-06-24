@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.paths import CHROMA_DB_DIR, has_openai_key
+from core.paths import has_openai_key
 from core.prompts.evidence_rerank_prompt import build_evidence_rerank_context, build_evidence_rerank_messages
 from core.prompts.query_rewrite_prompt import build_query_rewrite_context, build_query_rewrite_messages
 from core.schemas.retrieval_schema import validate_evidence_rerank_output, validate_query_rewrite_output
@@ -12,6 +12,7 @@ from core.state import ComplianceState
 from core.tools.retrieval_tools import (
     apply_deterministic_evidence_summaries,
     apply_evidence_rerank_selection,
+    build_evidence_context,
     build_evidence_queries,
     calculate_evidence_score,
     classify_evidence_quality,
@@ -138,17 +139,41 @@ def evidence_retriever_node(state: ComplianceState) -> ComplianceState:
     original_queries = build_evidence_queries(updated_state)
     query_rewrite_result = try_rewrite_evidence_queries(updated_state, original_queries)
     queries = query_rewrite_result["queries"]
-    evidence_list = []
+    raw_evidence_list = []
+    retrieval_debug = []
     for query_item in queries:
-        evidence_list.extend(retrieve_evidence_for_query(query_item, top_k=3))
-    evidence_list = deduplicate_evidence(evidence_list)
+        query_evidence = retrieve_evidence_for_query(query_item, top_k=3)
+        raw_evidence_list.extend(query_evidence)
+        retrieval_debug.append(query_item.get("_retrieval_debug", {
+            "query": query_item.get("query", ""),
+            "query_type": query_item.get("query_type", ""),
+            "risk_type": query_item.get("risk_type", ""),
+            "result_count": len(query_evidence),
+            "retrieval_method": "unknown",
+            "backend_status": {},
+        }))
+
+    evidence_list = deduplicate_evidence(raw_evidence_list)
     evidence_list.sort(key=lambda item: item.get("score", 0.0), reverse=True)
     evidence_list = evidence_list[:8]
     evidence_rerank_result = try_rerank_evidence(updated_state, evidence_list)
     evidence_list = evidence_rerank_result["evidence"]
+    evidence_list = [
+        {
+            key: value
+            for key, value in item.items()
+            if key not in {"source_path", "absolute_path", "local_path", "internal_path", "chroma_path"}
+        }
+        for item in evidence_list
+    ]
     evidence_score = calculate_evidence_score(evidence_list)
     evidence_quality = classify_evidence_quality(evidence_score, evidence_list)
+    evidence_context = build_evidence_context(evidence_list)
 
+    updated_state["retrieval_queries"] = queries
+    updated_state["retrieved_evidences"] = evidence_list
+    updated_state["evidence_context"] = evidence_context
+    updated_state["retrieval_debug"] = retrieval_debug
     updated_state["evidence_queries"] = queries
     updated_state["evidence_query_rewrite_detail"] = {
         **query_rewrite_result["detail"],
@@ -169,7 +194,7 @@ def evidence_retriever_node(state: ComplianceState) -> ComplianceState:
         "evidence_quality": evidence_quality,
         "query_rewrite": updated_state["evidence_query_rewrite_detail"],
         "evidence_rerank": updated_state["evidence_rerank_detail"],
-        "chroma_db_dir": str(CHROMA_DB_DIR),
+        "retrieval_debug": retrieval_debug,
     }
     updated_state["next_action"] = "risk_judgment"
     return updated_state
