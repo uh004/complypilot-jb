@@ -194,7 +194,8 @@ def test_apply_deterministic_evidence_summaries_adds_review_context() -> None:
     enriched = apply_deterministic_evidence_summaries(evidence)
 
     assert enriched[0]["linked_risk_type"] == "benefit_condition_missing"
-    assert "maximum benefit" in enriched[0]["evidence_summary"]
+    assert "혜택 조건 관련 근거" in enriched[0]["evidence_summary"]
+    assert "review evidence" not in enriched[0]["evidence_summary"]
     assert enriched[0]["rerank_used"] is False
 
 

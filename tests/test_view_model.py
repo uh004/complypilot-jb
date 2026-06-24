@@ -1,4 +1,5 @@
 from core.report.view_model import build_user_view_model, deduplicate_evidence, deduplicate_risks
+from app import evidence_summary_text, recommended_action_text
 
 
 def test_pass_case_view_model_hides_problem_cards() -> None:
@@ -31,7 +32,7 @@ def test_high_case_view_model_builds_problem_cards() -> None:
                 "keyword": "누구나 승인",
                 "risk_type": "approval_misleading",
                 "base_level": "High",
-                "reason": "승인 가능성을 단정적으로 표현했습니다.",
+                "reason": "승인 가능성을 단정적으로 보이게 할 수 있습니다.",
                 "matched_sentence": "누구나 승인 가능한 대출입니다.",
             }
         ],
@@ -63,14 +64,38 @@ def test_deduplicate_risks_groups_same_risk_expression() -> None:
 def test_deduplicate_evidence_keeps_best_score() -> None:
     evidence = [
         {"doc_title": "guide.pdf", "page": 1, "risk_type": "approval_misleading", "score": 0.2, "snippet": "old"},
-        {"doc_title": "guide.pdf", "page": 1, "risk_type": "approval_misleading", "score": 0.8, "snippet": "new"},
+        {"doc_title": "guide.pdf", "page": 1, "risk_type": "approval_misleading", "score": 0.8, "snippet": "old"},
     ]
 
     deduped = deduplicate_evidence(evidence)
 
     assert len(deduped) == 1
     assert deduped[0]["score"] == 0.8
-    assert deduped[0]["snippet"] == "new"
+    assert deduped[0]["snippet"] == "old"
+
+
+def test_deduplicate_evidence_merges_same_page_with_different_risk_types() -> None:
+    evidence = [
+        {
+            "doc_title": "guide.pdf",
+            "page": 10,
+            "risk_type": "benefit_scope_misleading",
+            "score": 0.41,
+            "snippet": "혜택은 조건과 한도를 함께 표시해야 합니다.",
+        },
+        {
+            "doc_title": "guide.pdf",
+            "page": 10,
+            "risk_type": "benefit_condition_missing",
+            "score": 0.72,
+            "snippet": "혜택은 조건과 한도를 함께 표시해야 합니다.",
+        },
+    ]
+
+    deduped = deduplicate_evidence(evidence)
+
+    assert len(deduped) == 1
+    assert deduped[0]["score"] == 0.72
 
 
 def test_view_model_sanitizes_evidence_paths_and_legal_wording() -> None:
@@ -158,7 +183,7 @@ def test_view_model_groups_review_points_by_risk_type_and_separates_missing_disc
     assert point["detected_keywords"] == ["maximum benefit", "unlimited"]
     assert point["matched_sentences"] == ["Anyone can get maximum benefit.", "Use unlimited discounts."]
     assert len(view_model["missing_disclaimers"]) == 1
-    assert all(card["problem_expression"] != "annual fee" for card in view_model["problem_cards"])
+    assert any(card["problem_expression"] == "annual fee" for card in view_model["problem_cards"])
 
 
 def test_view_model_adds_evidence_summary_and_linked_risk_type() -> None:
@@ -209,3 +234,67 @@ def test_view_model_prefers_report_summary_detail() -> None:
     assert view_model["summary"] == "Polished executive summary."
     assert view_model["top_action_items"][0]["title"] == "Clarify condition"
     assert view_model["evidence_explanation"] == "Evidence is linked."
+
+
+def test_view_model_prefers_retrieved_evidences_and_exposes_retrieval_details() -> None:
+    view_model = build_user_view_model(
+        {
+            "risk_level": "Medium",
+            "detected_risks": [],
+            "missing_disclaimers": [],
+            "retrieved_evidences": [
+                {
+                    "doc_title": "guide.pdf",
+                    "page": 3,
+                    "risk_type": "benefit_scope_misleading",
+                    "score": 0.71,
+                    "snippet": "Benefits should be presented with conditions and limits.",
+                    "retrieval_method": "hybrid",
+                }
+            ],
+            "evidence_list": [
+                {
+                    "doc_title": "older.pdf",
+                    "page": 1,
+                    "risk_type": "approval_misleading",
+                    "score": 0.2,
+                    "snippet": "older evidence",
+                }
+            ],
+            "retrieval_queries": [
+                {
+                    "source": "detected_risks",
+                    "query_type": "detected_risk",
+                    "risk_type": "benefit_scope_misleading",
+                    "query": "혜택 한도 조건",
+                }
+            ],
+            "evidence_context": "[근거 1] guide.pdf / page=3",
+            "evidence_quality": "sufficient",
+            "retrieval_debug": [{"retrieval_method": "hybrid", "result_count": 1}],
+        }
+    )
+
+    assert view_model["evidence"][0]["doc_title"] == "guide.pdf"
+    assert view_model["evidence"][0]["retrieval_method"] == "hybrid"
+    assert view_model["retrieval"]["query_count"] == 1
+    assert view_model["retrieval"]["evidence_count"] == 1
+    assert view_model["retrieval"]["evidence_quality"] == "sufficient"
+    assert view_model["retrieval"]["queries"][0]["query"] == "혜택 한도 조건"
+    assert "guide.pdf" in view_model["retrieval"]["evidence_context"]
+
+
+def test_report_helpers_hide_evidence_and_actions_for_pass_case() -> None:
+    view_model = {
+        "is_pass": True,
+        "evidence": [
+            {
+                "doc_title": "guide.pdf",
+                "page": 1,
+                "evidence_summary": "일반 검토 관련 근거: 예시",
+            }
+        ],
+    }
+
+    assert evidence_summary_text(view_model) == "해당 없음"
+    assert recommended_action_text(view_model) == "추가 조치 필요 없음"

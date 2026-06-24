@@ -909,16 +909,28 @@ def calculate_evidence_score(evidence_list: list[dict[str, Any]]) -> float:
 
 
 def build_evidence_summary(evidence: dict[str, Any]) -> str:
-    """evidence 한 건의 deterministic summary를 생성합니다."""
+    """evidence 1건의 사용자 표시용 요약을 생성한다."""
     risk_type = str(evidence.get("risk_type", "") or "general_review")
-    keyword = str(evidence.get("keyword", "") or "").strip()
-    snippet = normalize_extracted_text(str(evidence.get("snippet", "") or ""))
-    prefix = f"{risk_type} review evidence"
-    if keyword:
-        prefix += f" for '{keyword}'"
-    if snippet:
-        return f"{prefix}: {snippet[:160]}"
-    return prefix
+    snippet = normalize_extracted_text(str(evidence.get("snippet", "") or "")).replace("\n", " ").strip()
+    risk_label_map = {
+        "approval_misleading": "승인 가능성 관련 근거",
+        "misleading_approval": "승인 가능성 관련 근거",
+        "rate_condition_missing": "금리 조건 관련 근거",
+        "misleading_rate": "금리 조건 관련 근거",
+        "fee_condition_missing": "수수료 조건 관련 근거",
+        "benefit_condition_missing": "혜택 조건 관련 근거",
+        "benefit_scope_misleading": "혜택 범위 관련 근거",
+        "issuance_condition_missing": "발급 조건 관련 근거",
+        "missing_disclaimer": "필수 고지 관련 근거",
+        "general_review": "일반 검토 관련 근거",
+    }
+    label = risk_label_map.get(risk_type, "관련 규정 근거")
+    if not snippet:
+        return label
+    compact = " ".join(snippet.split())
+    if len(compact) > 160:
+        compact = compact[:157].rstrip(" ,.;:/") + "..."
+    return f"{label}: {compact}"
 
 
 def apply_deterministic_evidence_summaries(evidence_list: list[dict[str, Any]]) -> list[dict[str, Any]]:
