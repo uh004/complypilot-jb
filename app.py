@@ -282,24 +282,28 @@ def trim_text(text: str, limit: int = 180) -> str:
     return shortened.rstrip(" ,.;:/") + "..."
 
 
-def first_problem_expression(view_model: dict[str, Any]) -> str:
-    points = view_model.get("grouped_review_points", [])
-    if not points:
+def all_problem_expressions(view_model: dict[str, Any]) -> str:
+    groups = view_model.get("display_review_groups", [])
+    if not groups:
+        missing = view_model.get("missing_disclaimers", [])
+        if missing:
+            return "특정 위험 단어 없음 (단, 필수 고지 문구 누락됨)"
         return "탐지 표현 없음"
-    point = points[0]
-    keywords = point.get("detected_keywords", [])
-    if keywords:
-        return ", ".join(str(item) for item in keywords[:3] if item)
-    return str(point.get("representative_sentence", "") or "표현 확인 필요")
+    lines = []
+    for group in groups:
+        keywords = [str(item) for item in group.get("keywords", []) if item]
+        if keywords:
+            lines.append(f"- {group.get('group_label', '검토 필요 표현')}: {', '.join(keywords[:6])}")
+    return "\n".join(lines) if lines else "표현 확인 필요"
 
 
-def first_risk_type(view_model: dict[str, Any]) -> str:
-    points = view_model.get("grouped_review_points", [])
-    if points:
-        return str(points[0].get("risk_type_label", "") or "위험 유형 확인 필요")
-    missing = view_model.get("missing_disclaimers", [])
-    if missing:
-        return "필수 고지 보완 필요"
+def all_risk_types(view_model: dict[str, Any]) -> str:
+    groups = view_model.get("display_review_groups", [])
+    types = [str(group.get("risk_type_label", "")) for group in groups]
+    seen = set()
+    unique_types = [x for x in types if x and not (x in seen or seen.add(x))]
+    if unique_types:
+        return ", ".join(unique_types)
     return "특이 위험 없음"
 
 
@@ -307,10 +311,10 @@ def evidence_summary_lines(view_model: dict[str, Any], limit: int = 2) -> list[s
     """메인 리포트에 노출할 근거 요약 줄을 만든다."""
     rows: list[str] = []
     for item in view_model.get("evidence", [])[:limit]:
-        title = str(item.get("doc_title", "") or "관련 규정")
-        page = item.get("page") or "-"
-        basis = str(item.get("evidence_summary", "") or item.get("snippet", "")).strip()
-        rows.append(f"{title} p.{page} - {trim_text(basis, 120)}")
+        title = str(item.get("display_title") or item.get("doc_title") or "관련 규정")
+        topic = str(item.get("display_topic") or "금융상품 광고 관련 준수사항")
+        risk_label = str(item.get("risk_type_label") or "검토 필요")
+        rows.append(f"{title}\n- {topic}\n- 관련 위험: {risk_label}")
     return rows
 
 
@@ -328,6 +332,16 @@ def rewrite_recommendation_lines(view_model: dict[str, Any], limit: int = 4) -> 
     lines: list[str] = []
     seen: set[str] = set()
 
+    clean_text = str(view_model.get("clean_rewrite_text", "") or "").strip()
+    if clean_text:
+        for line in clean_text.splitlines():
+            cleaned = line.lstrip("- ").strip()
+            if cleaned and cleaned not in seen:
+                seen.add(cleaned)
+                lines.append(cleaned)
+            if len(lines) >= limit:
+                return [trim_text(item, 180) for item in lines]
+
     for point in view_model.get("grouped_review_points", []):
         action = str(point.get("suggested_action", "") or "").strip()
         if action and action not in seen:
@@ -344,16 +358,7 @@ def rewrite_recommendation_lines(view_model: dict[str, Any], limit: int = 4) -> 
         if len(lines) >= limit:
             return lines
 
-    fallback = str(view_model.get("clean_rewrite_text", "") or "").strip()
-    if fallback and not lines:
-        for line in fallback.splitlines():
-            cleaned = line.lstrip("- ").strip()
-            if cleaned and cleaned not in seen:
-                lines.append(cleaned)
-            if len(lines) >= limit:
-                break
-
-    return [trim_text(line, 160) for line in lines]
+    return [trim_text(line, 180) for line in lines]
 
 
 def rewrite_recommendation_text(view_model: dict[str, Any]) -> str:
@@ -376,13 +381,24 @@ def recommended_action_text(view_model: dict[str, Any]) -> str:
     return "추가 조치 필요 없음"
 
 
+def evidence_quality_label(value: str) -> str:
+    """내부 evidence_quality 값을 사용자용 문구로 변환한다."""
+    quality_map = {
+        "sufficient": "충분",
+        "weak": "보완 필요",
+        "insufficient": "근거 부족",
+    }
+    raw_quality = str(value or "").lower()
+    return quality_map.get(raw_quality, str(value or "-") or "-")
+
+
 def report_rows(view_model: dict[str, Any]) -> list[tuple[str, str]]:
     return [
-        ("탐지 표현", first_problem_expression(view_model)),
-        ("위험 유형", first_risk_type(view_model)),
-        ("관련 근거", evidence_summary_text(view_model)),
-        ("수정 권장안", rewrite_recommendation_text(view_model)),
-        ("권장 조치", recommended_action_text(view_model)),
+        ("주요 탐지 표현", all_problem_expressions(view_model)),
+        ("주요 위험 유형", all_risk_types(view_model)),
+        ("주요 관련 근거", evidence_summary_text(view_model)),
+        ("통합 수정 권장안", rewrite_recommendation_text(view_model)),
+        ("최우선 권장 조치", recommended_action_text(view_model)),
     ]
 
 
@@ -410,6 +426,7 @@ def render_sidebar() -> tuple[str, str, str, dict[str, bool]]:
         ai_options = {
             "enable_llm_text_repair": False,
             "enable_llm_content_detection": False,
+            "enable_llm_risk_detection": False,
             "enable_llm_query_rewrite": False,
             "enable_llm_evidence_rerank": False,
             "enable_llm_rewrite": False,
@@ -417,11 +434,12 @@ def render_sidebar() -> tuple[str, str, str, dict[str, bool]]:
         }
 
         if developer_mode:
-            with st.expander("AI enhancement options", expanded=False):
+            with st.expander("AI enhancement options", expanded=True):
                 st.caption("기본값은 off이며, 실패 시 deterministic fallback을 사용합니다.")
                 ai_options = {
                     "enable_llm_text_repair": st.checkbox("Text repair", value=False),
                     "enable_llm_content_detection": st.checkbox("Content enum resolver", value=False),
+                    "enable_llm_risk_detection": st.checkbox("Risk detection verification (Hybrid AI)", value=True),
                     "enable_llm_query_rewrite": st.checkbox("Evidence query rewrite", value=False),
                     "enable_llm_evidence_rerank": st.checkbox("Evidence rerank summary", value=False),
                     "enable_llm_rewrite": st.checkbox("Rewrite generation", value=False),
@@ -459,8 +477,16 @@ def render_top_metrics(view_model: dict[str, Any]) -> None:
 def render_report_panel(view_model: dict[str, Any]) -> None:
     badge_class = risk_badge_class(view_model.get("final_decision", ""))
     is_pass = bool(view_model.get("is_pass"))
-    displayed_evidence_quality = "-" if is_pass else str(view_model.get("retrieval", {}).get("evidence_quality", "-") or "-")
+    
+    raw_quality = str(view_model.get("retrieval", {}).get("evidence_quality", "-") or "-")
+    displayed_evidence_quality = "-" if is_pass else evidence_quality_label(raw_quality)
+    
     displayed_evidence_count = 0 if is_pass else len(view_model.get("evidence", []))
+    
+    detected_count = len(view_model.get("grouped_review_points", []))
+    missing_count = len(view_model.get("missing_disclaimers", []))
+    total_issues = detected_count + missing_count
+    
     rows_html = "".join(
         f"<tr><th>{html.escape(label)}</th><td>{render_report_cell(value)}</td></tr>"
         for label, value in report_rows(view_model)
@@ -485,12 +511,12 @@ def render_report_panel(view_model: dict[str, Any]) -> None:
                     <div class="action-value">{html.escape(displayed_evidence_quality)}</div>
                 </div>
                 <div class="action-card">
-                    <div class="action-label">탐지 건수</div>
-                    <div class="action-value">{len(view_model.get('grouped_review_points', []))}</div>
+                    <div class="action-label">검토 필요 항목</div>
+                    <div class="action-value">{total_issues}건</div>
                 </div>
                 <div class="action-card">
                     <div class="action-label">근거 건수</div>
-                    <div class="action-value">{displayed_evidence_count}</div>
+                    <div class="action-value">{displayed_evidence_count}건</div>
                 </div>
             </div>
         </div>
@@ -500,26 +526,30 @@ def render_report_panel(view_model: dict[str, Any]) -> None:
 
 
 def render_user_details(view_model: dict[str, Any]) -> None:
+    groups = view_model.get("display_review_groups", [])
+    if groups and not view_model.get("is_pass"):
+        with st.expander(f"탐지된 위험 표현 상세 ({len(groups)}건)", expanded=False):
+            for group in groups:
+                with st.container(border=True):
+                    st.markdown(f"**{group.get('group_label', '검토 필요 표현')}**")
+                    st.write(f"위험 유형: {group.get('risk_type_label', '검토 필요')}")
+                    st.write(f"탐지 표현: {', '.join(group.get('keywords', []))}")
+
     evidence = view_model.get("evidence", [])
     if evidence and not view_model.get("is_pass"):
         with st.expander(f"관련 규정 근거 보기 ({len(evidence)}건)", expanded=False):
             for item in evidence:
-                title = str(item.get("doc_title", "") or "관련 규정")
-                page = item.get("page") or "-"
-                score = item.get("score", 0)
-                method = str(item.get("retrieval_method", "") or "").strip()
+                title = str(item.get("display_title") or item.get("doc_title", "") or "관련 규정")
+                topic = str(item.get("display_topic") or "금융상품 광고 관련 준수사항")
+                risk_label = str(item.get("risk_type_label") or "검토 필요")
                 summary = str(item.get("evidence_summary", "") or "").strip()
                 snippet = trim_text(str(item.get("snippet", "") or ""), 320)
-
-                meta_parts = [f"p.{page}", f"score {score}"]
-                if method:
-                    meta_parts.append(method)
 
                 st.markdown(
                     f"""
                     <div class="evidence-card">
                         <div class="evidence-title">{html.escape(title)}</div>
-                        <div class="evidence-meta">{html.escape(' / '.join(meta_parts))}</div>
+                        <div class="evidence-meta">{html.escape(topic)} · 관련 위험: {html.escape(risk_label)}</div>
                         <div class="evidence-summary">{html.escape(trim_text(summary or snippet, 180))}</div>
                         <div class="evidence-snippet">{html.escape(snippet)}</div>
                     </div>

@@ -190,21 +190,20 @@ def generate_pdf_report(view_model: dict[str, Any], result: dict[str, Any]) -> P
 
     cursor["y"] += 8
     _write_line(cursor["page"], cursor, "3. 주요 검토 항목", size=13, bold=True, fontfile=fontfile)
-    grouped_points = view_model.get("grouped_review_points", [])
-    if grouped_points:
+    display_groups = view_model.get("display_review_groups", [])
+    if display_groups:
         _write_table(
             cursor,
-            ["유형", "등급", "탐지 키워드", "매칭"],
+            ["표현 그룹", "위험 유형", "탐지 표현"],
             [
                 [
+                    item.get("group_label", "검토 필요 표현"),
                     item.get("risk_type_label", "검토 필요"),
-                    item.get("level_label", "-"),
-                    ", ".join(item.get("detected_keywords", [])[:3]),
-                    f"{item.get('match_count', 0)}건",
+                    ", ".join(item.get("keywords", [])[:4]),
                 ]
-                for item in grouped_points[:5]
+                for item in display_groups[:5]
             ],
-            [180, 70, 210, 50],
+            [160, 150, 200],
             row_height=34,
             fontfile=fontfile,
         )
@@ -244,12 +243,17 @@ def generate_pdf_report(view_model: dict[str, Any], result: dict[str, Any]) -> P
         cursor["y"] += 8
         _write_line(cursor["page"], cursor, "7. 관련 규정 근거", size=13, bold=True, fontfile=fontfile)
         for item in view_model["evidence"][:3]:
+            title = item.get("display_title") or item.get("doc_title", "")
+            topic = item.get("display_topic") or "금융상품 광고 관련 준수사항"
+            risk_label = item.get("risk_type_label") or item.get("linked_risk_type", "")
             _write_wrapped(
                 cursor["page"],
                 cursor,
-                f"- {item.get('doc_title', '')} / p.{item.get('page', '-')} / score {item.get('score', 0)} / {item.get('risk_type_label') or item.get('linked_risk_type', '')}",
+                f"- {title}",
                 fontfile=fontfile,
             )
+            _write_wrapped(cursor["page"], cursor, f"  - {topic}", size=9, fontfile=fontfile)
+            _write_wrapped(cursor["page"], cursor, f"  - 관련 위험: {risk_label}", size=9, fontfile=fontfile)
             if item.get("evidence_summary"):
                 _write_wrapped(cursor["page"], cursor, f"  {_shorten(item.get('evidence_summary', ''), 150)}", size=9, fontfile=fontfile)
 

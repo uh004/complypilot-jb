@@ -25,26 +25,41 @@ STATUS_LABELS = {
 }
 
 RISK_TYPE_LABELS = {
-    "approval_misleading": "승인 가능성 오인 가능성",
-    "misleading_approval": "승인 가능성 오인 가능성",
-    "rate_condition_missing": "금리 조건 누락 가능성",
-    "misleading_rate": "금리 조건 누락 가능성",
-    "fee_condition_missing": "수수료 조건 누락 가능성",
-    "benefit_condition_missing": "혜택 조건 누락 가능성",
-    "benefit_scope_misleading": "혜택 범위 오인 가능성",
-    "issuance_condition_missing": "발급 조건 누락 가능성",
+    "approval_misleading": "승인 보장 오인",
+    "misleading_approval": "승인 보장 오인",
+    "rate_condition_missing": "금리 조건 오인",
+    "misleading_rate": "금리 조건 오인",
+    "fee_condition_missing": "수수료·무료 혜택 조건 누락",
+    "benefit_condition_missing": "혜택 조건 누락",
+    "benefit_scope_misleading": "혜택 범위 오인",
+    "issuance_condition_missing": "발급 조건 누락",
     "principal_loss": "원금손실 안내 필요",
     "principal_loss_misleading": "원금손실 안내 필요",
-    "missing_disclaimer": "필수 고지 누락 가능성",
+    "missing_disclaimer": "필수 고지사항 누락",
     "general_review": "일반 검토 필요",
 }
 
+EXPRESSION_GROUP_LABELS = {
+    "approval_misleading": "승인 보장 표현",
+    "misleading_approval": "승인 보장 표현",
+    "rate_condition_missing": "금리 우위 표현",
+    "misleading_rate": "금리 우위 표현",
+    "fee_condition_missing": "무료·수수료 표현",
+    "benefit_condition_missing": "무료·수수료 표현",
+    "benefit_scope_misleading": "혜택 범위 표현",
+    "issuance_condition_missing": "발급 조건 표현",
+    "principal_loss": "투자 위험 안내 표현",
+    "principal_loss_misleading": "투자 위험 안내 표현",
+    "missing_disclaimer": "필수 고지사항",
+    "general_review": "검토 필요 표현",
+}
+
 DEFAULT_SUGGESTIONS = {
-    "approval_misleading": "대출 가능 여부는 개인 신용도와 카드사 심사 기준에 따라 달라질 수 있음을 함께 안내해 주세요.",
-    "misleading_approval": "대출 가능 여부는 개인 신용도와 카드사 심사 기준에 따라 달라질 수 있음을 함께 안내해 주세요.",
-    "rate_condition_missing": "금리 적용 조건과 우대 조건, 적용 기간을 함께 제시해 주세요.",
-    "misleading_rate": "금리 적용 조건과 우대 조건, 적용 기간을 함께 제시해 주세요.",
-    "fee_condition_missing": "수수료 면제 조건, 적용 대상, 적용 기간을 함께 제시해 주세요.",
+    "approval_misleading": "“누구나 승인”, “100% 승인” 등 단정 표현은 삭제하거나 심사 결과에 따라 달라질 수 있음으로 완화합니다.",
+    "misleading_approval": "“누구나 승인”, “100% 승인” 등 단정 표현은 삭제하거나 심사 결과에 따라 달라질 수 있음으로 완화합니다.",
+    "rate_condition_missing": "“최저금리”, “업계 최저” 표현은 비교 기준, 적용 조건, 산정 시점을 함께 고지합니다.",
+    "misleading_rate": "“최저금리”, “업계 최저” 표현은 비교 기준, 적용 조건, 산정 시점을 함께 고지합니다.",
+    "fee_condition_missing": "“수수료 무료”, “무료 혜택” 표현은 적용 대상, 기간, 제외 조건을 함께 고지합니다.",
     "benefit_condition_missing": "혜택 적용 조건, 한도, 제외 대상을 함께 제시해 주세요.",
     "benefit_scope_misleading": "혜택 적용 대상, 이용 조건, 월 한도, 제외 대상을 함께 안내해 주세요.",
     "issuance_condition_missing": "발급 가능 여부와 심사 기준, 발급 제외 조건을 함께 안내해 주세요.",
@@ -108,6 +123,91 @@ def _truncate_display_text(text: str, limit: int = 160) -> str:
 def _normalize_evidence_text(text: str) -> str:
     """근거 중복 판별을 위해 텍스트를 정규화한다."""
     return re.sub(r"\s+", " ", str(text or "")).strip().lower()
+
+
+def _normalize_keyword_key(keyword: str) -> str:
+    """같은 의미의 탐지 표현을 묶기 위한 키를 만든다."""
+    return re.sub(r"[\s·ㆍ\-_/]+", "", str(keyword or "")).strip().lower()
+
+
+def expression_group_label(risk_type: str) -> str:
+    """위험 유형을 사용자용 탐지 표현 그룹명으로 변환한다."""
+    return EXPRESSION_GROUP_LABELS.get(risk_type, "검토 필요 표현")
+
+
+def build_display_review_groups(points: list[dict[str, Any]], missing: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """위험 그룹별로 탐지 표현을 중복 없이 묶는다."""
+    grouped: OrderedDict[str, dict[str, Any]] = OrderedDict()
+
+    for point in points or []:
+        risk_type = str(point.get("risk_type", "") or "general_review")
+        group_label = expression_group_label(risk_type)
+        if group_label not in grouped:
+            grouped[group_label] = {
+                "group_label": group_label,
+                "risk_type": risk_type,
+                "risk_type_label": risk_type_label(risk_type),
+                "keywords": [],
+                "_seen": set(),
+            }
+
+        group = grouped[group_label]
+        for keyword in point.get("detected_keywords", []):
+            keyword_text = str(keyword or "").strip()
+            keyword_key = _normalize_keyword_key(keyword_text)
+            if keyword_text and keyword_key not in group["_seen"]:
+                group["_seen"].add(keyword_key)
+                group["keywords"].append(keyword_text)
+
+    if missing:
+        group_label = expression_group_label("missing_disclaimer")
+        grouped[group_label] = {
+            "group_label": group_label,
+            "risk_type": "missing_disclaimer",
+            "risk_type_label": risk_type_label("missing_disclaimer"),
+            "keywords": [item.get("disclaimer", "필수 고지") for item in missing],
+            "_seen": set(),
+        }
+
+    return sanitize_report_payload([
+        {key: value for key, value in group.items() if key != "_seen"}
+        for group in grouped.values()
+        if group.get("keywords")
+    ])
+
+
+def _simplify_law_name(title: str) -> str:
+    """긴 법령명을 화면용 약칭으로 줄인다."""
+    if "금융소비자 보호에 관한 법률" in title or "금융소비자보호법" in title:
+        return "금융소비자보호법"
+    if "금융소비자 보호에 관한 감독규정" in title:
+        return "금융소비자보호 감독규정"
+    if "표시ㆍ광고의 공정화에 관한 법률" in title or "표시 · 광고의 공정화에 관한 법률" in title:
+        return "표시광고법"
+    return re.sub(r"\([^)]*\)", "", title).strip()
+
+
+def summarize_evidence_title(title: str, page: Any = None) -> tuple[str, str]:
+    """긴 근거 문서명을 법령명/조문 요약으로 변환한다."""
+    raw_title = str(title or "").strip()
+    article_match = re.search(r"제\s*\d+\s*조", raw_title)
+    article = re.sub(r"\s+", "", article_match.group(0)) if article_match else ""
+    law_name = _simplify_law_name(raw_title)
+    topic_match = re.search(r"제\s*\d+\s*조\(([^)]{1,60})\)", raw_title)
+    topic = topic_match.group(1).strip() if topic_match else ""
+
+    if article and law_name:
+        display_title = f"{law_name} {article}"
+    elif law_name:
+        display_title = law_name
+    else:
+        display_title = "관련 규정"
+
+    if not topic:
+        topic = "금융상품 광고 관련 준수사항"
+    if page not in (None, "", "-"):
+        topic = f"{topic} / p.{page}"
+    return display_title, topic
 
 
 def deduplicate_risks(risks: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -219,9 +319,12 @@ def deduplicate_evidence(evidence_list: list[dict[str, Any]]) -> list[dict[str, 
 
         score = float(evidence.get("score", 0.0) or 0.0)
         if key not in best_by_key or score > float(best_by_key[key].get("score", 0.0) or 0.0):
+            display_title, display_topic = summarize_evidence_title(doc_title, evidence.get("page"))
             best_by_key[key] = sanitize_report_payload(
                 {
                     "doc_title": doc_title,
+                    "display_title": display_title,
+                    "display_topic": display_topic,
                     "page": evidence.get("page"),
                     "risk_type": evidence.get("risk_type", ""),
                     "risk_type_label": risk_type_label(str(evidence.get("risk_type", ""))),
@@ -313,6 +416,7 @@ def build_sentence_rewrite_suggestions(risks: list[dict[str, Any]], missing: lis
                     "match_count": risk.get("match_count", 1),
                     "level_label": risk.get("level_label", ""),
                     "risk_type_label": risk.get("risk_type_label", ""),
+                    "risk_type": risk_type,
                     "problem_expression": risk.get("problem_expression", ""),
                     "why": risk.get("reason", ""),
                     "suggested_sentence": suggestion,
@@ -328,7 +432,8 @@ def build_sentence_rewrite_suggestions(risks: list[dict[str, Any]], missing: lis
                     "matched_sentences": [],
                     "match_count": 1,
                     "level_label": level_label(str(item.get("base_level", "Medium"))),
-                    "risk_type_label": "필수 고지 보완",
+                    "risk_type": "missing_disclaimer",
+                    "risk_type_label": "필수 고지사항 누락",
                     "problem_expression": item.get("disclaimer", "필수 고지"),
                     "why": item.get("why", ""),
                     "suggested_sentence": item.get("suggestion", ""),
@@ -344,17 +449,17 @@ def build_clean_rewrite_text(suggestions: list[dict[str, str]], pass_case: bool)
         return "수정이 필요한 문구가 발견되지 않았습니다."
 
     lines: list[str] = []
-    seen: set[str] = set()
+    seen_risk_types: set[str] = set()
 
     for item in suggestions:
-        expression = str(item.get("problem_expression", "검토 표현")).strip()
-        suggested = str(item.get("suggested_sentence", "")).strip()
+        risk_type = str(item.get("risk_type", "") or item.get("risk_type_label", "") or "general_review")
+        suggested = str(DEFAULT_SUGGESTIONS.get(risk_type) or item.get("suggested_sentence", "")).strip()
         if not suggested:
             continue
-        line = f"- {expression}: {_truncate_display_text(suggested, 160)}"
-        if line in seen:
+        if risk_type in seen_risk_types:
             continue
-        seen.add(line)
+        seen_risk_types.add(risk_type)
+        line = f"- {risk_type_label(risk_type)}: {_truncate_display_text(suggested, 180)}"
         lines.append(line)
         if len(lines) >= 4:
             break
@@ -404,6 +509,7 @@ def build_user_view_model(result: dict[str, Any]) -> dict[str, Any]:
     grouped_review_points = build_grouped_review_points(risks)
     pass_case = is_pass_case(result)
     suggestions = build_sentence_rewrite_suggestions(risks, missing)
+    display_review_groups = build_display_review_groups(grouped_review_points, missing)
     source_pages = build_source_pages(raw_page_texts)
     issue_locations = build_issue_locations(risks, raw_page_texts)
 
@@ -441,6 +547,7 @@ def build_user_view_model(result: dict[str, Any]) -> dict[str, Any]:
             },
             "problem_cards": suggestions,
             "grouped_review_points": grouped_review_points,
+            "display_review_groups": display_review_groups,
             "issue_locations": issue_locations,
             "source_pages": source_pages,
             "risks": risks,

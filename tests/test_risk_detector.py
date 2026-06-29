@@ -101,10 +101,11 @@ def test_risk_detector_node_detects_high_risk_and_missing_disclaimer() -> None:
     assert result["disclaimer_results"][0]["is_present"] is False
     assert result["risk_detection_summary"] == {
         "sentence_count": 1,
+        "initial_risk_count": 2,
         "risk_count": 2,
         "missing_disclaimer_count": 1,
         "used_rule_count": 2,
-        "detector": "rule_based_keyword_and_disclaimer_check",
+        "detector": "hybrid_rule_and_ai_verification",
     }
     assert result["disclaimer_check_summary"]["missing_count"] == 1
     assert result["action_required"] is True

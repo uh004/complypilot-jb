@@ -1,5 +1,5 @@
 from core.report.view_model import build_user_view_model, deduplicate_evidence, deduplicate_risks
-from app import evidence_summary_text, recommended_action_text
+from app import all_problem_expressions, evidence_quality_label, evidence_summary_text, recommended_action_text, rewrite_recommendation_text
 
 
 def test_pass_case_view_model_hides_problem_cards() -> None:
@@ -46,7 +46,7 @@ def test_high_case_view_model_builds_problem_cards() -> None:
     assert view_model["compliance_review_label"] == "필요"
     assert view_model["problem_cards"]
     assert view_model["problem_cards"][0]["problem_expression"] == "누구나 승인"
-    assert "개인 신용도" in view_model["problem_cards"][0]["suggested_sentence"]
+    assert "심사 결과" in view_model["problem_cards"][0]["suggested_sentence"]
 
 
 def test_deduplicate_risks_groups_same_risk_expression() -> None:
@@ -298,3 +298,88 @@ def test_report_helpers_hide_evidence_and_actions_for_pass_case() -> None:
 
     assert evidence_summary_text(view_model) == "해당 없음"
     assert recommended_action_text(view_model) == "추가 조치 필요 없음"
+
+
+def test_view_model_builds_user_friendly_detection_groups_and_labels() -> None:
+    view_model = build_user_view_model(
+        {
+            "risk_level": "High",
+            "detected_risks": [
+                {
+                    "keyword": "최저금리",
+                    "keywords": ["최저금리", "최저 금리", "업계 최저"],
+                    "risk_type": "rate_condition_missing",
+                    "base_level": "Medium",
+                    "matched_sentence": "업계 최저 금리입니다.",
+                },
+                {
+                    "keyword": "누구나 승인",
+                    "keywords": ["누구나 승인", "100% 승인"],
+                    "risk_type": "approval_misleading",
+                    "base_level": "High",
+                    "matched_sentence": "누구나 승인됩니다.",
+                },
+            ],
+            "missing_disclaimers": [],
+        }
+    )
+
+    display_text = all_problem_expressions(view_model)
+    assert "승인 보장 표현: 누구나 승인, 100% 승인" in display_text
+    assert "금리 우위 표현: 최저금리, 업계 최저" in display_text
+    assert "최저금리, 최저 금리" not in display_text
+    assert view_model["grouped_review_points"][0]["risk_type_label"] == "승인 보장 오인"
+
+
+def test_rewrite_recommendations_are_grouped_by_risk_type() -> None:
+    view_model = build_user_view_model(
+        {
+            "risk_level": "Medium",
+            "detected_risks": [
+                {
+                    "keyword": "최저금리",
+                    "risk_type": "rate_condition_missing",
+                    "base_level": "Medium",
+                    "matched_sentence": "최저금리입니다.",
+                },
+                {
+                    "keyword": "업계 최저",
+                    "risk_type": "rate_condition_missing",
+                    "base_level": "Medium",
+                    "matched_sentence": "업계 최저입니다.",
+                },
+            ],
+            "missing_disclaimers": [],
+        }
+    )
+
+    recommendation = rewrite_recommendation_text(view_model)
+    assert recommendation.count("금리 조건 오인") == 1
+    assert "비교 기준, 적용 조건, 산정 시점" in recommendation
+
+
+def test_evidence_title_and_quality_are_display_friendly() -> None:
+    view_model = build_user_view_model(
+        {
+            "risk_level": "Medium",
+            "detected_risks": [],
+            "missing_disclaimers": [],
+            "evidence_quality": "weak",
+            "retrieved_evidences": [
+                {
+                    "doc_title": "금융소비자 보호에 관한 법률(법률)(제21065호)(20260102) 제22조(금융상품등에 관한 광고 관련 준수사항)",
+                    "page": 10,
+                    "risk_type": "approval_misleading",
+                    "score": 0.71,
+                    "snippet": "금융상품 광고 관련 준수사항입니다.",
+                }
+            ],
+        }
+    )
+
+    evidence_text = evidence_summary_text(view_model)
+    assert "금융소비자보호법 제22조" in evidence_text
+    assert "금융상품등에 관한 광고 관련 준수사항" in evidence_text
+    assert "관련 위험: 승인 보장 오인" in evidence_text
+    assert "(제21065호)" not in evidence_text
+    assert evidence_quality_label(view_model["retrieval"]["evidence_quality"]) == "보완 필요"

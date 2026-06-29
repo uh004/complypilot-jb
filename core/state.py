@@ -49,6 +49,9 @@ class ComplianceState(TypedDict):
     optional_conditions: NotRequired[dict[str, Any]]
 
     # Risk detection
+    enable_llm_risk_detection: NotRequired[bool]
+    risk_detection_model: NotRequired[str]
+    risk_detection_detail: NotRequired[dict[str, Any]]
     detected_risks: NotRequired[list[dict[str, Any]]]
     risk_detection_summary: NotRequired[dict[str, Any]]
     missing_disclaimers: NotRequired[list[dict[str, Any]]]
