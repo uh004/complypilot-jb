@@ -31,3 +31,9 @@ vector_db/**
 .streamlit/secrets.toml
 .DS_Store
 Thumbs.db
+
+# v2 RAG Database
+v2_dev/chroma_db/
+v2_dev/chroma_db_child/
+v2_dev/parent_store/
+*.pkl

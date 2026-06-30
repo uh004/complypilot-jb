@@ -27,6 +27,5 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run pytest
-        env:
-          PYTHONPATH: ${{ github.workspace }}
+        working-directory: ./v1_legacy
         run: pytest
