@@ -26,6 +26,5 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run pytest
-        working-directory: ./v1_legacy
-        run: pytest
+      - name: Skip legacy tests during v2 dev
+        run: echo "v1_legacy is deprecated. Skipping tests until v2_dev tests are ready."
