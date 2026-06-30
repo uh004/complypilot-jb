@@ -1,0 +1,44 @@
+{
+  "collection_name": "complypilot_regulations_v2",
+  "chroma_count": 2155,
+  "bm25_documents_count": 2155,
+  "sample_state_file": "demo_ad_text.txt",
+  "state_update_keys": [
+    "retrieval_queries",
+    "retrieved_evidences",
+    "evidence_context",
+    "evidence_quality",
+    "retrieval_debug"
+  ],
+  "evidence_quality": {
+    "query_count": 3,
+    "raw_evidence_count": 9,
+    "deduped_evidence_count": 5,
+    "has_evidence": true,
+    "top_score": 0.33613
+  },
+  "scenario_results": [
+    {
+      "name": "approval_and_rate",
+      "query_count": 3,
+      "evidence_count": 5,
+      "has_evidence": true,
+      "top_doc": "금융소비자 보호에 관한 법률(법률)(제21065호)(20260102) 제22조(금융상품등에 관한 광고 관련 준수사항)"
+    },
+    {
+      "name": "fee_only",
+      "query_count": 1,
+      "evidence_count": 3,
+      "has_evidence": true,
+      "top_doc": "금융소비자 보호에 관한 법률(법률)(제21065호)(20260102) 제19조(설명의무)"
+    },
+    {
+      "name": "fallback_text_only",
+      "query_count": 1,
+      "evidence_count": 3,
+      "has_evidence": true,
+      "top_doc": "금융소비자 보호에 관한 법률(법률)(제21065호)(20260102) 제22조(금융상품등에 관한 광고 관련 준수사항)"
+    }
+  ],
+  "retrieved_evidence_count": 5
+}

@@ -1,0 +1,31 @@
+{
+  "parent_count": 608,
+  "child_count": 2155,
+  "build_error_count": 0,
+  "children_path": "c:\\Users\\USER\\Desktop\\complypilot-jb\\data\\retrieval\\children.jsonl",
+  "length_summary": {
+    "child_count": 2155,
+    "min_length": 11,
+    "max_length": 3859,
+    "avg_length": 180.91,
+    "short_lt_80": 472,
+    "long_gt_3000": 1,
+    "long_gt_5000": 0
+  },
+  "split_strategy_counts": {
+    "paragraph_circled": 1669,
+    "numbered_item": 350,
+    "whole_article": 136
+  },
+  "child_status_counts": {
+    "ok": 1682,
+    "short_child_review": 472,
+    "long_child_review": 1
+  },
+  "document_type_counts": {
+    "law": 1017,
+    "supervisory_regulation": 908,
+    "enforcement_decree": 230
+  },
+  "build_errors": []
+}

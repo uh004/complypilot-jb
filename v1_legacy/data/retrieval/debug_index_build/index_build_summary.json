@@ -1,0 +1,34 @@
+{
+  "collection_name": "complypilot_regulations_v2",
+  "embedding_provider": "openai",
+  "embedding_model": "text-embedding-3-small",
+  "children_count": 2155,
+  "docs_count": 2155,
+  "chroma_count": 2155,
+  "chroma_dir": "c:\\Users\\USER\\Desktop\\complypilot-jb\\data\\chromadb",
+  "bm25_path": "c:\\Users\\USER\\Desktop\\complypilot-jb\\data\\retrieval\\bm25_index\\bm25.pkl",
+  "bm25_exists": true,
+  "bm25_file_size_mb": 11.21,
+  "document_type_counts": {
+    "law": 1017,
+    "supervisory_regulation": 908,
+    "enforcement_decree": 230
+  },
+  "split_strategy_counts": {
+    "paragraph_circled": 1669,
+    "numbered_item": 350,
+    "whole_article": 136
+  },
+  "seed_queries": [
+    "누구나 승인",
+    "최저금리",
+    "수수료",
+    "원금보장",
+    "확정수익",
+    "설명의무",
+    "부당권유",
+    "금리",
+    "이자율",
+    "광고 오인"
+  ]
+}

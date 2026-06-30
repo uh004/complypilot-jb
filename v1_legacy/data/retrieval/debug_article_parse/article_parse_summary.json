@@ -1,0 +1,27 @@
+{
+  "pdf_count": 8,
+  "article_count": 608,
+  "parse_error_count": 0,
+  "parents_path": "c:\\Users\\USER\\Desktop\\complypilot-jb\\data\\retrieval\\parents.jsonl",
+  "parsed_articles_path": "c:\\Users\\USER\\Desktop\\complypilot-jb\\data\\retrieval\\parsed_articles.jsonl",
+  "status_counts": {
+    "ok": 583,
+    "short_text_review": 25
+  },
+  "document_type_counts": {
+    "law": 297,
+    "supervisory_regulation": 258,
+    "enforcement_decree": 53
+  },
+  "article_count_by_law": {
+    "금융소비자 보호에 관한 감독규정(금융위원회고시)(제2026-11호)(20260402)": 38,
+    "금융소비자 보호에 관한 법률 시행령(대통령령)(제36287호)(20260428)": 53,
+    "금융소비자 보호에 관한 법률(법률)(제21065호)(20260102)": 75,
+    "여신전문금융업감독규정(금융위원회고시)(제2026-17호)(20260506)": 88,
+    "여신전문금융업법(법률)(제21065호)(20251001)": 112,
+    "예금자보호법(법률)(제21065호)(20260102)": 86,
+    "은행업감독규정 (금융위원회고시)(제2026-10호)(20260401)": 132,
+    "표시ㆍ광고의 공정화에 관한 법률(법률)(제20712호)(20250121)": 24
+  },
+  "parse_errors": []
+}

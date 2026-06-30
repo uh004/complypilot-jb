@@ -1,2 +1,0 @@
-"""Disclaimer checking helpers."""
-

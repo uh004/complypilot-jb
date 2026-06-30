@@ -1,0 +1,241 @@
+{
+  "collection_name": "complypilot_regulations_v2",
+  "chroma_count": 2155,
+  "bm25_documents_count": 2155,
+  "seed_queries": [
+    "누구나 승인",
+    "최저금리",
+    "수수료",
+    "원금보장",
+    "확정수익",
+    "설명의무",
+    "부당권유",
+    "금리",
+    "이자율",
+    "광고 오인"
+  ],
+  "eval_results": [
+    {
+      "query": "누구나 승인",
+      "result_count": 5,
+      "expected_keyword_hit": true,
+      "expected_risk_tag_hit": true,
+      "preferred_doc_type_hit": true,
+      "top_docs": [
+        {
+          "doc_title": "금융소비자 보호에 관한 법률(법률)(제21065호)(20260102) 제22조(금융상품등에 관한 광고 관련 준수사항)",
+          "document_type": "law",
+          "score": 0.24408,
+          "method": "vector",
+          "risk_tags": "advertising_regulation|approval_misleading|explanation_duty|fee_missing|principal_guarantee_misleading|rate_condition_missing|return_misleading"
+        },
+        {
+          "doc_title": "금융소비자 보호에 관한 감독규정(금융위원회고시)(제2026-11호)(20260402) 제17조(광고의 내용)",
+          "document_type": "supervisory_regulation",
+          "score": 0.18471,
+          "method": "vector",
+          "risk_tags": "advertising_regulation|approval_misleading|principal_guarantee_misleading|rate_condition_missing"
+        },
+        {
+          "doc_title": "예금자보호법(법률)(제21065호)(20260102) 제35조의4(개산지급금 지급의 승인)",
+          "document_type": "law",
+          "score": 0.17971,
+          "method": "bm25+vector",
+          "risk_tags": "approval_misleading"
+        },
+        {
+          "doc_title": "은행업감독규정 (금융위원회고시)(제2026-10호)(20260401) 제15조의3(전환계획의 승인 등)",
+          "document_type": "supervisory_regulation",
+          "score": 0.16012,
+          "method": "bm25+vector",
+          "risk_tags": "approval_misleading"
+        },
+        {
+          "doc_title": "예금자보호법(법률)(제21065호)(20260102) 제35조의5(매입 공고)",
+          "document_type": "law",
+          "score": 0.13389,
+          "method": "vector",
+          "risk_tags": "approval_misleading"
+        }
+      ]
+    },
+    {
+      "query": "최저금리",
+      "result_count": 5,
+      "expected_keyword_hit": true,
+      "expected_risk_tag_hit": true,
+      "preferred_doc_type_hit": true,
+      "top_docs": [
+        {
+          "doc_title": "금융소비자 보호에 관한 감독규정(금융위원회고시)(제2026-11호)(20260402) 제17조(광고의 내용)",
+          "document_type": "supervisory_regulation",
+          "score": 0.20587,
+          "method": "bm25",
+          "risk_tags": "advertising_regulation|approval_misleading|fee_missing|principal_guarantee_misleading|rate_condition_missing|return_misleading"
+        },
+        {
+          "doc_title": "금융소비자 보호에 관한 법률(법률)(제21065호)(20260102) 제19조(설명의무)",
+          "document_type": "law",
+          "score": 0.20449,
+          "method": "bm25",
+          "risk_tags": "approval_misleading|explanation_duty|fee_missing|principal_guarantee_misleading|rate_condition_missing|return_misleading|unfair_solicitation"
+        },
+        {
+          "doc_title": "금융소비자 보호에 관한 법률 시행령(대통령령)(제36287호)(20260428) 제13조(설명의무)",
+          "document_type": "enforcement_decree",
+          "score": 0.17639,
+          "method": "bm25",
+          "risk_tags": "explanation_duty|rate_condition_missing|return_misleading"
+        },
+        {
+          "doc_title": "금융소비자 보호에 관한 감독규정(금융위원회고시)(제2026-11호)(20260402) 제12조(설명의무)",
+          "document_type": "supervisory_regulation",
+          "score": 0.16351,
+          "method": "bm25",
+          "risk_tags": "explanation_duty|rate_condition_missing"
+        },
+        {
+          "doc_title": "여신전문금융업감독규정(금융위원회고시)(제2026-17호)(20260506) 제26조의6(금리인하 요구 등)",
+          "document_type": "supervisory_regulation",
+          "score": 0.16101,
+          "method": "bm25+vector",
+          "risk_tags": "rate_condition_missing"
+        }
+      ]
+    },
+    {
+      "query": "수수료",
+      "result_count": 5,
+      "expected_keyword_hit": true,
+      "expected_risk_tag_hit": true,
+      "preferred_doc_type_hit": true,
+      "top_docs": [
+        {
+          "doc_title": "금융소비자 보호에 관한 법률(법률)(제21065호)(20260102) 제19조(설명의무)",
+          "document_type": "law",
+          "score": 0.22515,
+          "method": "bm25",
+          "risk_tags": "approval_misleading|explanation_duty|fee_missing|principal_guarantee_misleading|rate_condition_missing|return_misleading|unfair_solicitation"
+        },
+        {
+          "doc_title": "금융소비자 보호에 관한 법률 시행령(대통령령)(제36287호)(20260428) 제13조(설명의무)",
+          "document_type": "enforcement_decree",
+          "score": 0.19587,
+          "method": "bm25",
+          "risk_tags": "explanation_duty|fee_missing|rate_condition_missing"
+        },
+        {
+          "doc_title": "금융소비자 보호에 관한 법률 시행령(대통령령)(제36287호)(20260428) 제26조(자료의 기록 및 유지ㆍ관리 등)",
+          "document_type": "enforcement_decree",
+          "score": 0.16896,
+          "method": "bm25+vector",
+          "risk_tags": "fee_missing"
+        },
+        {
+          "doc_title": "금융소비자 보호에 관한 감독규정(금융위원회고시)(제2026-11호)(20260402) 제13조(설명서)",
+          "document_type": "supervisory_regulation",
+          "score": 0.16562,
+          "method": "vector",
+          "risk_tags": "advertising_regulation|approval_misleading|explanation_duty|fee_missing|principal_guarantee_misleading|rate_condition_missing"
+        },
+        {
+          "doc_title": "금융소비자 보호에 관한 법률(법률)(제21065호)(20260102) 제46조(청약의 철회)",
+          "document_type": "law",
+          "score": 0.15351,
+          "method": "bm25",
+          "risk_tags": "advertising_regulation|approval_misleading|fee_missing|principal_guarantee_misleading"
+        }
+      ]
+    },
+    {
+      "query": "원금보장",
+      "result_count": 5,
+      "expected_keyword_hit": true,
+      "expected_risk_tag_hit": true,
+      "preferred_doc_type_hit": true,
+      "top_docs": [
+        {
+          "doc_title": "금융소비자 보호에 관한 법률(법률)(제21065호)(20260102) 제22조(금융상품등에 관한 광고 관련 준수사항)",
+          "document_type": "law",
+          "score": 0.32151,
+          "method": "bm25+vector",
+          "risk_tags": "advertising_regulation|approval_misleading|explanation_duty|fee_missing|principal_guarantee_misleading|rate_condition_missing|return_misleading"
+        },
+        {
+          "doc_title": "금융소비자 보호에 관한 법률 시행령(대통령령)(제36287호)(20260428) 제18조(광고의 내용)",
+          "document_type": "enforcement_decree",
+          "score": 0.28102,
+          "method": "bm25+vector",
+          "risk_tags": "advertising_regulation|fee_missing|principal_guarantee_misleading|rate_condition_missing"
+        },
+        {
+          "doc_title": "금융소비자 보호에 관한 법률 시행령(대통령령)(제36287호)(20260428) 제13조(설명의무)",
+          "document_type": "enforcement_decree",
+          "score": 0.21515,
+          "method": "bm25",
+          "risk_tags": "approval_misleading|explanation_duty|principal_guarantee_misleading"
+        },
+        {
+          "doc_title": "금융소비자 보호에 관한 감독규정(금융위원회고시)(제2026-11호)(20260402) 제12조(설명의무)",
+          "document_type": "supervisory_regulation",
+          "score": 0.20639,
+          "method": "bm25",
+          "risk_tags": "explanation_duty|principal_guarantee_misleading|unfair_solicitation"
+        },
+        {
+          "doc_title": "금융소비자 보호에 관한 법률(법률)(제21065호)(20260102) 제19조(설명의무)",
+          "document_type": "law",
+          "score": 0.20493,
+          "method": "bm25",
+          "risk_tags": "approval_misleading|explanation_duty|fee_missing|principal_guarantee_misleading|rate_condition_missing|return_misleading|unfair_solicitation"
+        }
+      ]
+    },
+    {
+      "query": "설명의무",
+      "result_count": 5,
+      "expected_keyword_hit": true,
+      "expected_risk_tag_hit": true,
+      "preferred_doc_type_hit": true,
+      "top_docs": [
+        {
+          "doc_title": "금융소비자 보호에 관한 법률(법률)(제21065호)(20260102) 제19조(설명의무)",
+          "document_type": "law",
+          "score": 0.15639,
+          "method": "vector",
+          "risk_tags": "explanation_duty"
+        },
+        {
+          "doc_title": "금융소비자 보호에 관한 법률 시행령(대통령령)(제36287호)(20260428) 제13조(설명의무)",
+          "document_type": "enforcement_decree",
+          "score": 0.14613,
+          "method": "bm25",
+          "risk_tags": "explanation_duty|rate_condition_missing"
+        },
+        {
+          "doc_title": "금융소비자 보호에 관한 감독규정(금융위원회고시)(제2026-11호)(20260402) 제12조(설명의무)",
+          "document_type": "supervisory_regulation",
+          "score": 0.13639,
+          "method": "bm25",
+          "risk_tags": "explanation_duty|rate_condition_missing"
+        },
+        {
+          "doc_title": "은행업감독규정 (금융위원회고시)(제2026-10호)(20260401) 제89조(금융거래조건의 공시 및 설명 등)",
+          "document_type": "supervisory_regulation",
+          "score": 0.13351,
+          "method": "bm25",
+          "risk_tags": "advertising_regulation|explanation_duty"
+        },
+        {
+          "doc_title": "금융소비자 보호에 관한 법률 시행령(대통령령)(제36287호)(20260428) 제12조(적정성원칙)",
+          "document_type": "enforcement_decree",
+          "score": 0.12563,
+          "method": "vector",
+          "risk_tags": "explanation_duty|unfair_solicitation"
+        }
+      ]
+    }
+  ],
+  "eval_pass_count": 5,
+  "eval_total_count": 5
+}
